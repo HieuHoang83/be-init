@@ -4,17 +4,16 @@ import { AuthService } from './auth.service';
 import { LocalStrategy } from './passport/local.strategy';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule } from '@nestjs/config';
-import { ConfigService } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './passport/jwt.strategy';
 import { AuthController } from './auth.controller';
-import { PrismaModule } from 'prisma/prisma.module';
-import { UserService } from 'src/user/user.service';
+import { UsersModule } from 'src/user/user.module';
 
 @Module({
   imports: [
     PassportModule,
-    PrismaModule,
+    // User/Role nam trong MongoDB, lay qua UsersModule
+    UsersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -27,7 +26,7 @@ import { UserService } from 'src/user/user.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, LocalStrategy, JwtStrategy, UserService],
+  providers: [AuthService, LocalStrategy, JwtStrategy],
   exports: [AuthService],
 })
 export class AuthModule {}

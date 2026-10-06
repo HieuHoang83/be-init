@@ -8,122 +8,102 @@ import { JwtService } from '@nestjs/jwt';
 import { IUser } from 'src/interface/users.interface';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
-import ms from 'ms';
-import { genSaltSync, hashSync, compareSync } from 'bcryptjs';
+import { genSaltSync, hashSync } from 'bcryptjs';
 import { UserLoginDto } from './dto/login-user.dto';
 import { UserService } from 'src/user/user.service';
 import { UpdatePasswordDto } from 'src/user/dto/update-password.dto';
-import { PaginateInfo } from 'src/interface/paginate.interface';
 import { UserRegisterDto } from './dto/user-register.dto';
-import { PrismaService } from 'prisma/prisma.service';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly userService: UserService,
   ) {}
 
-  // Hàm hash password
+  // Ham hash password
   private hashPassword(password: string): string {
-    const salt = genSaltSync(10);
-    return hashSync(password, salt);
+    return hashSync(password, genSaltSync(10));
   }
 
-  // Tạo refresh token
-  createRefreshToken(payload: any): string {
+  // Tao refresh token
+  createRefreshToken(payload: object): string {
     return this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_REFRESH_TOKEN_SECRET'),
       expiresIn: this.configService.get('JWT_REFRESH_EXPIRE'),
     });
   }
 
-  // Tạo access token
-  createAccessToken(payload: any): string {
+  // Tao access token
+  createAccessToken(payload: object): string {
     return this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_ACCESS_TOKEN_SECRET'),
       expiresIn: this.configService.get('JWT_ACCESS_EXPIRE'),
     });
   }
 
-  // Đăng ký user mới
+  // Dang ky user moi
   async registerUser(dto: UserRegisterDto) {
-    // Kiểm tra số điện thoại đã tồn tại chưa
-    const existingUser = await this.prisma.user.findUnique({
-      where: { phone: dto.phone },
-    });
-
-    if (existingUser) {
+    const existing = await this.userService.findOneByPhone(dto.phone).catch(() => null);
+    if (existing) {
       throw new BadRequestException('Phone number already registered');
     }
 
-    // Tìm role theo tên
-    const role = await this.prisma.role.findUnique({
-      where: { name: dto.role },
-    });
-
+    const role = await this.userService.findRoleByName(dto.role);
     if (!role) {
       throw new BadRequestException(`Role "${dto.role}" does not exist`);
     }
 
-    const hashedPassword = this.hashPassword(dto.password);
-
-    // Tạo người dùng mới
-    const user = await this.prisma.user.create({
-      data: {
-        name: dto.name,
-        phone: dto.phone,
-        password: hashedPassword,
-        avatar: dto.avatar,
-        roleId: role.id,
-      },
+    const user = await this.userService.create({
+      name: dto.name,
+      phone: dto.phone,
+      password: this.hashPassword(dto.password),
+      avatar: dto.avatar,
+      roleId: role._id.toString(),
     });
 
-    delete user.password; // Không trả về password cho client
-    return user;
+    const { password, refreshToken, role: userRole, ...rest } = user.toObject();
+    return { ...rest, role: userRole.name };
   }
 
-  // Đăng nhập user, trả về user info + token
+  // Dang nhap user, tra ve user info + token
   async login(userLoginDto: UserLoginDto) {
-    console.log('Login attempt with:', userLoginDto);
     const { phone, password } = userLoginDto;
 
-    // Gọi service xử lý login
     const user = await this.userService.login(phone, password);
 
-    // Tạo payload token
+    const roleName = user.role?.name;
+
     const payload = {
-      id: user.id,
+      id: user._id.toString(),
       phone: user.phone,
       name: user.name,
-      role: user.role.name,
+      role: roleName,
     };
 
     const refresh_token = this.createRefreshToken(payload);
     const access_token = this.createAccessToken(payload);
-    await this.userService.updateRefreshToken(user.id, refresh_token);
-    // Không trả về password
-    const { id, refreshToken, roleId, ...userClean } = user;
+
+    await this.userService.updateRefreshToken(payload.id, refresh_token);
 
     return {
       user: {
-        ...userClean,
-        role: user.role.name,
+        id: payload.id,
+        name: user.name,
+        phone: user.phone,
+        avatar: user.avatar,
+        role: roleName,
       },
-      token: {
-        access_token,
-        refresh_token,
-      },
+      token: { access_token, refresh_token },
     };
   }
 
   async validateUser(username: string, password: string) {
-    return await this.userService.login(username, password);
+    return this.userService.login(username, password);
   }
 
-  // Xử lý refresh token lấy token mới
+  // Xu ly refresh token lay token moi
   verifyRefreshToken(refreshToken: string) {
     const secret = this.configService.get<string>('JWT_REFRESH_TOKEN_SECRET');
 
@@ -132,36 +112,21 @@ export class AuthService {
     }
 
     try {
-      const decoded = this.jwtService.verify(refreshToken, { secret });
-      console.log('Decoded refresh token:', decoded);
-      return decoded;
+      return this.jwtService.verify(refreshToken, { secret });
     } catch (error) {
       throw new BadRequestException('Invalid or expired refresh token');
     }
   }
+
   async processNewToken(refreshToken: string) {
     if (!refreshToken) {
       throw new BadRequestException('Refresh token is missing');
     }
 
-    const decoded = this.verifyRefreshToken(refreshToken);
+    // Verify chu ky truoc, roi moi tim user
+    this.verifyRefreshToken(refreshToken);
 
-    // Tìm user theo refresh token
-    const user = await this.prisma.user.findFirst({
-      where: { refreshToken },
-      select: {
-        id: true,
-        name: true,
-        phone: true,
-        avatar: true,
-        role: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    });
-
+    const user = await this.userService.findOneByRefreshToken(refreshToken);
     if (!user) {
       throw new BadRequestException(
         'Refresh token not associated with any user',
@@ -171,27 +136,25 @@ export class AuthService {
     const payload = {
       sub: 'token login',
       iss: 'from server',
-      id: user.id,
+      id: user._id.toString(),
       name: user.name,
       phone: user.phone,
-      role: user.role.name,
+      role: user.role?.name,
     };
 
-    return {
-      access_token: this.createAccessToken(payload),
-    };
+    return { access_token: this.createAccessToken(payload) };
   }
 
-  // Đăng xuất user
+  // Dang xuat user
   async logout(user: IUser, response: Response) {
     await this.userService.updateRefreshToken(user.id, '');
     response.clearCookie('refresh_token');
     return true;
   }
 
-  // Cập nhật mật khẩu user
-  async updatePassword(userId: string, updatePasswordDto: UpdatePasswordDto) {
-    await this.userService.updatePassword(userId, updatePasswordDto);
+  // Cap nhat mat khau user
+  async updatePassword(userId: string, dto: UpdatePasswordDto) {
+    await this.userService.updatePassword(userId, dto);
     return true;
   }
 }

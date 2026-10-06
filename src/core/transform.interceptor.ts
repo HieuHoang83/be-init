@@ -28,7 +28,10 @@ export class TransformInterceptor<T>
 
     // Exclude EJS views and static asset requests from transformation
     const isStaticAsset = request.url.startsWith('/public/') || request.url.startsWith('/assets/');
-    const isViewRoute = request.url.endsWith('.ejs') || request.url.startsWith('/views/') || request.headers.accept.includes('text/html');
+    const accept = request.headers?.accept || '';
+    const isViewRoute = request.url.endsWith('.ejs') || request.url.startsWith('/views/') || accept.includes('text/html');
+    // Webhook Haravan phai tra raw (challenge / xac nhan HMAC), khong boc wrapper
+    const isWebhookRoute = request.url.includes('/webhooks/haravan');
 
     if (isStaticAsset || isViewRoute) {
       return next.handle(); // Don't transform for static files or views

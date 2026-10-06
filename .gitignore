@@ -28,9 +28,13 @@ lerna-debug.log*
 .settings/
 *.sublime-workspace
 .env
+atlas-credentials.env
 # IDE - VSCode
 .vscode
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# log webhook debug
+logs/

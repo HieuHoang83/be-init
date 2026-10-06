@@ -10,7 +10,11 @@ import cookieParser from 'cookie-parser';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    // Giữ raw body: bắt buộc để verify HMAC webhook Haravan
+    // (X-Haravan-Hmacsha256 = base64(HMAC_SHA256(raw_body, client_secret)))
+    rawBody: true,
+  });
 
   // config service for env
   const configService = app.get(ConfigService);
