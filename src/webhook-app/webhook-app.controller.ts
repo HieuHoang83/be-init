@@ -27,7 +27,7 @@ import { WebhookPrivateService } from '../webhook-private/webhook-private.servic
 import { WebhookAppHmacGuard } from './webhook-app.guard';
 import { WebhookAppService } from './webhook-app.service';
 
-/** Chi luu header can cho audit */
+/** Chỉ giữ lại các header cần cho việc kiểm tra. */
 function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers ?? {})) {
@@ -37,15 +37,9 @@ function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
 }
 
 /**
- * WEBHOOK KET NOI APP (app-based webhook).
- *
- * Khac webhook rieng tu o `webhook-private` o cho co buoc SUBSCRIBE:
- *   1. App goi GET voi hub.mode=subscribe, hub.verify_token, hub.challenge.
- *      Server tra ve NGUYEN gia tri hub.challenge (raw, khong boc JSON).
- *   2. Sau do moi nhan duoc POST thong bao.
- *
- * Secret verify HMAC lay tu bang goc `app_installations`, khong phai secret
- * trong trang Thong bao.
+ * Nhận webhook của ứng dụng. Ứng dụng xác thực webhook qua bước GET subscribe,
+ * sau đó gửi thông báo bằng POST. Mã xác thực HMAC được lấy từ
+ * `app_installations`, không phải secret trong trang Thông báo.
  */
 @ApiTags('Haravan Webhook (App)')
 @Controller('webhooks/app')
@@ -60,10 +54,7 @@ export class WebhookAppController {
     private readonly webhookService: WebhookPrivateService,
   ) {}
 
-  /**
-   * Buoc 1 - Subscribe. Tra raw `hub.challenge`.
-   * Chi cho HTTPS, nen deploy sau HTTPS truoc khi app goi endpoint nay.
-   */
+  /** Xác thực đăng ký và trả nguyên giá trị `hub.challenge`. */
   @Get()
   @ApiOperation({ summary: 'App webhook subscribe (hub.challenge)' })
   @ApiQuery({ name: 'hub.verify_token', required: true, type: String })
@@ -77,15 +68,15 @@ export class WebhookAppController {
     @Res() res: Response,
   ): Promise<void> {
     if (!verifyToken || !challenge) {
-      this.logger.warn('Subscribe thieu hub.verify_token hoac hub.challenge');
-      throw new BadRequestException('Missing hub.verify_token hoac hub.challenge');
+      this.logger.warn('Đăng ký thiếu hub.verify_token hoặc hub.challenge');
+      throw new BadRequestException('Thiếu hub.verify_token hoặc hub.challenge');
     }
 
     const orgId = extractOrgId(req.headers, { org_id: orgIdQuery });
 
     const ok = await this.appService.verifySubscriptionToken(orgId, verifyToken);
 
-    // Ghi lai file: cho biet day co phai buoc verify_token khong, va co khop khong
+    // Ghi kết quả xác thực nhưng không ghi giá trị token.
     logWebhookPayload({
       kind: 'app',
       flow: 'verify_token',
@@ -101,7 +92,7 @@ export class WebhookAppController {
       },
       result: {
         outcome: ok ? 'verify_token_khop' : 'verify_token_khong_khop',
-        // KHONG ghi gia tri token, chi ghi do dai de doi chieu
+        // Chỉ ghi độ dài token để đối chiếu, không ghi giá trị token.
         verifyTokenLength: verifyToken.length,
         challengeLength: challenge.length,
       },
@@ -109,8 +100,8 @@ export class WebhookAppController {
     });
 
     if (!ok) {
-      this.logger.warn('verify_token khong khop, tra 401');
-      throw new UnauthorizedException('Invalid verify token');
+      this.logger.warn('Mã xác thực không khớp, trả về 401');
+      throw new UnauthorizedException('Mã xác thực không hợp lệ');
     }
 
     if (orgId) {
@@ -118,24 +109,18 @@ export class WebhookAppController {
       await this.appService.confirmSubscription(orgId);
     }
 
-    this.logger.log(`Subscribe thanh cong (mode=${mode ?? 'subscribe'})`);
+    this.logger.log(`Đăng ký webhook thành công (mode=${mode ?? 'subscribe'})`);
     res.status(200).type('text/plain').send(String(challenge));
   }
 
   /**
-   * Buoc 2 - Nhan thong bao. Haravan yeu cau tra 200 trong 5 giay nen
-   * controller KHONG lam viec nang: chi day job vao hang roi tra luon.
-   * `JobWorker` se claim job roi luu don + khach trong `OrderWorker`.
-   *
-   * App gui ca `orders/create` LAN `orders/updated` cho cung mot don:
-   *   - `create`  -> tao ban ghi don, thuong THIEU ten/sdt
-   *   - `updated` -> bo sung ten/sdt/so don da mua (nguon chinh de biet khach cu)
-   * Ca hai deu chay, va chi ghi de field co gia tri nen don khong bi mat du lieu.
+   * Nhận thông báo và đưa vào hàng đợi để trả lời Haravan trong thời hạn yêu cầu.
+   * Worker sẽ xử lý và lưu đơn hàng sau đó.
    */
   @Post()
   @HttpCode(200)
   @UseGuards(WebhookAppHmacGuard)
-  @ApiOperation({ summary: 'Nhan thong bao tu app webhook' })
+  @ApiOperation({ summary: 'Nhận thông báo từ app webhook' })
   async receive(
     @Body() envelope: Record<string, unknown>,
     @Headers() headers: Record<string, unknown>,
@@ -151,15 +136,15 @@ export class WebhookAppController {
     const orgId = extractOrgId(headers, envelope);
     const picked = pickHeaders(headers);
 
-    // extractOrder xu ly ca 3 dang body: order thang, { data }, { data: { order } }
+    // Hỗ trợ body dạng order trực tiếp, { data } hoặc { data: { order } }.
     const parsed = extractOrder(headers, envelope);
     const order = parsed.order as unknown as Record<string, unknown> | null;
     const haravanOrderId = Number(order?.id);
 
-    // Khong du du lieu -> van tra 200, neu tra loi Haravan se retry lien tuc
+    // Vẫn trả 200 khi thiếu dữ liệu để Haravan không gửi lại liên tục.
     if (!orgId || !haravanOrderId) {
       this.logger.warn(
-        `App webhook bo qua: thieu orgId hoac id don (topic ${topic}, org ${orgId ?? 'n/a'})`,
+        `Bỏ qua app webhook: thiếu orgId hoặc mã đơn (topic ${topic}, org ${orgId ?? 'n/a'})`,
       );
       logWebhookPayload({
         kind: 'app',
@@ -172,25 +157,17 @@ export class WebhookAppController {
         status: 200,
         result: {
           outcome: 'bo_qua_thieu_du_lieu',
-          note: 'thieu orgId hoac order.id -> van tra 200 de Haravan khong retry',
+          note: 'Thiếu orgId hoặc order.id; vẫn trả 200 để Haravan không gửi lại',
           headers: picked,
         },
       });
       return { received: true, topic, orgId };
     }
 
-    /**
-     * Job mang dung `haravanOrderId`, KHONG mang ca payload.
-     *
-     * Payload webhook co the 5-50KB (don nhieu san pham + dia chi). Dua
-     * nguyen payload vao `jobs` lam bang phinh toang vo khong. Worker tai
-     * `haravan-order/{orgId}-{haravanOrderId}` trong `WebhookPrivateService`.
-     * Sau khi worker ghi xong don moi den luu - nen don luon la ban moi nhat.
-     */
+    // Job chỉ chứa mã đơn; payload được lưu riêng để tránh làm phình bảng jobs.
     let jobId: string | undefined;
     try {
-      // Luu payload de worker tai lai. `record` la bang audit chung,
-      // nen app webhook cung dung, khong can bang rieng.
+      // Lưu payload để worker tải lại. Bảng webhook này dùng chung cho các loại webhook.
       const event = await this.webhookService.record({
         orgId,
         topic,
@@ -213,10 +190,9 @@ export class WebhookAppController {
         jobId: job.id,
       });
     } catch (error) {
-      // Queue/HTTP co the chet luc nao - tra 200 de Harovan khong retry,
-      // job da mat nen ghi ro de can doi chieu thu cong.
+      // Ghi lỗi để kiểm tra thủ công; vẫn trả 200 để Haravan không gửi lại.
       const message = (error as Error).message;
-      this.logger.error(`Khong day duoc job cho don ${haravanOrderId}: ${message}`);
+      this.logger.error(`Không thể đưa đơn ${haravanOrderId} vào hàng đợi: ${message}`);
       logWebhookPayload({
         kind: 'app',
         flow: 'event_notification',
@@ -250,7 +226,7 @@ export class WebhookAppController {
       },
     });
 
-    this.logger.log(`App ${topic}: don ${haravanOrderId} -> job ${jobId}`);
+    this.logger.log(`App ${topic}: đơn ${haravanOrderId} -> job ${jobId}`);
 
     return { received: true, topic, orgId, queued: true, jobId };
   }

@@ -37,7 +37,7 @@ export class UserController {
   }
   @Patch('update-info')
   async updateUserInfo(
-    @User() user: IUser, // user đang đăng nhập
+    @User() user: IUser, // Người dùng đang đăng nhập.
     @Body() dto: UpdateUserDto,
   ) {
     return this.userService.updateUser(user.id, dto);

@@ -14,16 +14,9 @@ import { Customer } from './customer.entity';
 import { appConfig } from '../config';
 import { ApiClient } from '../api/api.service';
 
-/**
- * RULE TRUNG TAM: chi xac nhan don khi khach DA TUNG MUA truoc don nay.
- *
- * Prior orders are counted from BE storage, excluding canceled orders and
- * the current order, regardless of payment status.
- */
 describe('OrderService - evaluateConfirmEligibility', () => {
   let service: OrderService;
 
-  // Mock giong mongoose Query: method tra ve object co .exec()
   const queryMock = (value: unknown) => ({
     exec: () => Promise.resolve(value),
   });
@@ -40,8 +33,21 @@ describe('OrderService - evaluateConfirmEligibility', () => {
   const orderModel = {
     countDocuments: jest.fn((_filter: Record<string, unknown>) => queryMock(0)),
     aggregate: jest.fn(() => queryMock([])),
+    find: jest.fn(() => ({
+      sort: () => ({
+        skip: () => ({
+          limit: () => queryMock([]),
+        }),
+      }),
+    })),
     findOne: jest.fn(() => queryMock(null)),
-    findOneAndUpdate: jest.fn(() => queryMock(null)),
+    findOneAndUpdate: jest.fn(
+      (
+        _filter: unknown,
+        _update: unknown,
+        _options: unknown,
+      ) => queryMock(null),
+    ),
   };
 
   const actionModel = {
@@ -52,8 +58,13 @@ describe('OrderService - evaluateConfirmEligibility', () => {
   };
 
   const customerModel = {
-    findOne: jest.fn(() => queryMock(null)),
-    updateOne: jest.fn(() => queryMock({ acknowledged: true })),
+    findOne: jest.fn(() => ({
+      lean: () => queryMock(null),
+    })),
+    updateOne: jest.fn(
+      (_filter: unknown, _update: unknown) =>
+        queryMock({ acknowledged: true }),
+    ),
     create: jest.fn(async (doc: unknown) => ({
       _id: 'c1',
       ...(doc as object),
@@ -81,10 +92,6 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       ...overrides,
     } as unknown as OrderDocument);
 
-  /**
-   * Nap config that nhat cho rule qua ConfigModule.forFeature,
-   * giong cach AppModule nap config that.
-   */
   const makeService = async (
     rule: Partial<{ minPriorOrders: number; minPriorSpent: number }> = {},
   ) => {
@@ -205,6 +212,255 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     });
   });
 
+  describe('giu orders_count tai thoi diem tao don', () => {
+    const makeUpsertQuery = () => {
+      orderModel.findOne.mockImplementation(
+        () => ({ select: () => ({ lean: () => queryMock(null) }) } as never),
+      );
+      const storedOrder = { customer: { ordersCount: 2 } };
+      orderModel.findOneAndUpdate.mockImplementation(
+        () => queryMock(storedOrder) as never,
+      );
+    };
+
+    it('luu orders_count tu webhook orders/create', async () => {
+      makeUpsertQuery();
+      service = await makeService();
+
+      await service.upsertOrder(
+        1,
+        {
+          id: 200,
+          customer: { id: 55, orders_count: 2 },
+        },
+        'webhook',
+        'orders/create',
+      );
+
+      expect(orderModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { orgId: 1, haravanOrderId: 200 },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            'customer.ordersCount': 2,
+          }),
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('khong ghi de orders_count tu webhook cap nhat trang thai', async () => {
+      makeUpsertQuery();
+      service = await makeService();
+
+      await service.upsertOrder(
+        1,
+        {
+          id: 200,
+          customer: { id: 55, orders_count: 3 },
+        },
+        'webhook',
+        'orders/updated',
+      );
+
+      const update = orderModel.findOneAndUpdate.mock.calls[0][1] as {
+        $set: Record<string, unknown>;
+      };
+      expect(update.$set).not.toHaveProperty('customer.ordersCount');
+    });
+
+    it('khong lay orders_count tu orders/updated khi tao ban ghi khach moi', async () => {
+      service = await makeService();
+
+      await service.upsertCustomer(
+        1,
+        {
+          id: 200,
+          total_price: 250000,
+          customer: { id: 55, orders_count: 8 },
+        },
+        'orders/updated',
+      );
+
+      expect(customerModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({ haravanOrdersCount: 0 }),
+      );
+    });
+
+    it('chi cap nhat count khach tu webhook orders/create', async () => {
+      service = await makeService();
+      customerModel.findOne.mockImplementation(() => ({
+        lean: () => queryMock({ _id: 'customer-1' }),
+      }));
+
+      await service.upsertCustomer(
+        1,
+        {
+          id: 201,
+          customer: { id: 55, orders_count: 4 },
+        },
+        'orders/updated',
+      );
+      const updateEvent = customerModel.updateOne.mock.calls[0][1] as {
+        $set: Record<string, unknown>;
+      };
+      expect(updateEvent.$set).not.toHaveProperty('haravanOrdersCount');
+
+      await service.upsertCustomer(
+        1,
+        {
+          id: 200,
+          customer: { id: 55, orders_count: 2 },
+        },
+        'orders/create',
+      );
+      const createEvent = customerModel.updateOne.mock.calls[1][1] as {
+        $set: Record<string, unknown>;
+      };
+      expect(createEvent.$set.haravanOrdersCount).toBe(2);
+    });
+
+    it('luon cap nhat ho so khach khi xu ly webhook don', async () => {
+      const order = buildOrder({ customer: undefined });
+      orderModel.findOne.mockImplementation(
+        () => ({ select: () => ({ lean: () => queryMock(null) }) }) as never,
+      );
+      orderModel.findOneAndUpdate.mockImplementation(
+        () => queryMock(order) as never,
+      );
+      service = await makeService();
+      const upsertCustomer = jest.spyOn(service, 'upsertCustomer');
+
+      await service.processIncomingOrder({
+        orgId: 1,
+        payload: { id: 2 },
+        topic: 'orders/updated',
+      });
+
+      expect(upsertCustomer).toHaveBeenCalledWith(
+        1,
+        { id: 2 },
+        'orders/updated',
+      );
+    });
+  });
+
+  describe('danh sach don hang', () => {
+    it('uu tien customer.orders_count tu payload lam so thu tu don', async () => {
+      const order = buildOrder({
+        orderName: '#10015',
+        orderNumber: '#10015',
+        customer: {
+          haravanId: 55,
+          ordersCount: 7,
+        } as Order['customer'],
+        processing: {
+          reason: SkipReason.FIRST_TIME_BUYER,
+          isReturningCustomer: true,
+          priorOrderCount: 2,
+          priorSpent: 500000,
+        },
+      });
+      order.toObject = () => ({
+        orderName: '#10015',
+        orderNumber: '#10015',
+        processing: order.processing,
+      }) as never;
+      orderModel.find.mockImplementation(
+        () => ({
+          sort: () => ({
+            skip: () => ({
+              limit: () => queryMock([order]),
+            }),
+          }),
+        }) as never,
+      );
+      orderModel.countDocuments.mockImplementation(() => queryMock(1));
+      service = await makeService();
+
+      const result = await service.findOrders({}, 1, 20);
+
+      expect(result.items[0]).toMatchObject({
+        name: '#10015',
+        priorOrderCount: 2,
+        customerOrderNumber: 7,
+      });
+    });
+
+    it('du phong bang lich su BE khi payload khong co orders_count', async () => {
+      const order = buildOrder({
+        orderName: '#10015',
+        customer: {
+          haravanId: 55,
+        } as Order['customer'],
+        processing: {
+          reason: SkipReason.FIRST_TIME_BUYER,
+          isReturningCustomer: true,
+          priorOrderCount: 2,
+          priorSpent: 500000,
+        },
+      });
+      order.toObject = () => ({
+        orderName: '#10015',
+        processing: order.processing,
+      }) as never;
+      orderModel.find.mockImplementation(
+        () => ({
+          sort: () => ({
+            skip: () => ({
+              limit: () => queryMock([order]),
+            }),
+          }),
+        }) as never,
+      );
+      orderModel.countDocuments.mockImplementation(() => queryMock(1));
+      service = await makeService();
+
+      const result = await service.findOrders({}, 1, 20);
+
+      expect(result.items[0]).toMatchObject({
+        name: '#10015',
+        customerOrderNumber: 3,
+      });
+    });
+
+    it('khong gan so thu tu neu don khong co dinh danh khach', async () => {
+      const order = buildOrder({
+        orderName: '#10016',
+        customer: undefined,
+        email: undefined,
+        phone: undefined,
+        processing: {
+          reason: SkipReason.NO_CUSTOMER,
+          isReturningCustomer: false,
+          priorOrderCount: 0,
+          priorSpent: 0,
+        },
+      });
+      order.toObject = () => ({
+        orderName: '#10016',
+        processing: order.processing,
+      }) as never;
+      orderModel.find.mockImplementation(
+        () => ({
+          sort: () => ({
+            skip: () => ({
+              limit: () => queryMock([order]),
+            }),
+          }),
+        }) as never,
+      );
+      orderModel.countDocuments.mockImplementation(() => queryMock(1));
+      service = await makeService();
+
+      const result = await service.findOrders({}, 1, 20);
+
+      expect(result.items[0]).toMatchObject({
+        name: '#10016',
+        customerOrderNumber: null,
+      });
+    });
+  });
+
   describe('khong du dieu kien', () => {
     it('khach moi (orders_count=1) -> skip first_time_buyer', async () => {
       orderModel.countDocuments.mockImplementation(() => queryMock(0));
@@ -228,15 +484,16 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       });
     });
 
-    it('don chua thanh toan -> skip invalid_payment', async () => {
+    it('don chua thanh toan van duoc danh gia theo cac rule khac', async () => {
+      orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
       const decision = await service.evaluateConfirmEligibility(
         1,
         buildOrder({ financialStatus: 'pending' }),
       );
 
-      expect(decision.skipReason).toBe(SkipReason.INVALID_PAYMENT);
-      expect(decision.shouldConfirm).toBe(false);
+      expect(decision.skipReason).toBe(SkipReason.NONE);
+      expect(decision.shouldConfirm).toBe(true);
     });
 
     it('don da confirmed o Harovan -> skip already_confirmed', async () => {

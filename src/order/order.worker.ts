@@ -13,12 +13,7 @@ export interface OrderCreatedPayload {
   topic: string;
 }
 
-/**
- * Worker xu ly don hang: doc payload da luu -> len DB -> danh gia rule -> confirm.
- *
- * Job duoc day vao queue boi WebhookController, nen controller luon tra 200
- * trong vong 5 giay nhu Harovan yeu cau, con viec nang chay o day.
- */
+/** Xử lý đơn hàng từ hàng đợi. */
 @Injectable()
 export class OrderWorker implements OnModuleInit {
   private readonly logger = new Logger(OrderWorker.name);
@@ -68,6 +63,7 @@ export class OrderWorker implements OnModuleInit {
         payload,
         source: 'webhook',
         jobId: job.id,
+        topic,
       });
 
       let priorHistory: { priorOrderCount: number; priorSpent: number } | null =
@@ -107,7 +103,6 @@ export class OrderWorker implements OnModuleInit {
           `reason=${result.decision.skipReason}`,
       );
 
-      // Log de doc: khach cu hay moi, da confirm hay bo qua
       logOrderDecision({
         endpoint: 'POST /api/v1/webhooks/haravan (worker)',
         topic,
@@ -155,17 +150,12 @@ export class OrderWorker implements OnModuleInit {
         );
       }
 
-      // Nem lai cho queue retry
       this.logger.error(`Xu ly don ${haravanOrderId} that bai: ${message}`);
       throw error;
     }
   }
 
-  /**
-   * Lay payload don.
-   * Uu tien dung payload da luu trong webhook event (chinh du lieu da verify
-   * HMAC, khong goi lai Harovan). Neu khong con -> goi Omni API lay day du.
-   */
+  /** Đọc payload webhook đã lưu, hoặc lấy lại đơn từ API. */
   private async loadPayload(
     webhookEventId: string | undefined,
     orgId: number,

@@ -11,7 +11,7 @@ import {
   WebhookPrivateEventSchema,
 } from './webhook-private.entity';
 
-/** Nhan + audit webhook. */
+/** Tiếp nhận và lưu thông tin kiểm tra webhook. */
 @Module({
   imports: [
     ConfigModule.forFeature(appConfig),

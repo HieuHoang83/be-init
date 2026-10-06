@@ -30,8 +30,8 @@ export interface ReplayResult {
 }
 
 /**
- * Luu va tra cuoi webhook da nhan. Day la "audit log" va cung la nguon payload
- * de replay khi job xu ly that bai.
+ * Lưu và truy vấn webhook đã nhận. Bản ghi vừa dùng để kiểm tra lịch sử,
+ * vừa lưu payload để chạy lại khi xử lý thất bại.
  */
 @Injectable()
 export class WebhookPrivateService {
@@ -103,7 +103,7 @@ export class WebhookPrivateService {
     return { items, total, page, limit };
   }
 
-  /** Load the exact verified event payload referenced by the job. */
+  /** Tải đúng payload đã xác thực mà công việc đang tham chiếu. */
   async extractOrderPayload(
     eventId: string,
     orgId: number,
@@ -119,7 +119,7 @@ export class WebhookPrivateService {
     }
 
     try {
-      // Header da luu khi nhan webhook, de doc org_id/topic theo dang Harovan gui
+      // Dùng header đã lưu để đọc org_id và topic theo định dạng Haravan gửi.
       const { order } = extractOrder(
         (event.headers ?? {}) as Record<string, unknown>,
         event.payload,

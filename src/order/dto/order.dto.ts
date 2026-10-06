@@ -57,11 +57,11 @@ export class ListWebhookEventsQuery {
 }
 
 export class ConfirmOrderBody {
-  /** Nguoi thuc hien, ghi vao audit log */
+  /** Người thực hiện. */
   @IsOptional() @IsString()
   actor?: string;
 
-  /** Bo qua rule khach quay lai, xac nhan tay */
+  /** Bỏ qua rule khi xác nhận thủ công. */
   @IsOptional() @Type(() => Boolean) @IsBoolean()
   force?: boolean;
 }

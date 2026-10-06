@@ -7,7 +7,7 @@ import {
   WebhookSubscribeResponse,
 } from './webhook-app.interface';
 
-/** org_id lay tu query hoac body, fallback org_id trong .env */
+/** Lấy org_id từ query hoặc body; nếu thiếu thì dùng org_id trong .env. */
 function resolveOrgId(from: Record<string, unknown> | undefined): number {
   const raw =
     from?.orgId ??
@@ -23,12 +23,11 @@ function resolveOrgId(from: Record<string, unknown> | undefined): number {
 }
 
 /**
- * Dieu khien dang ky webhook tren phia Haravan (khong phai webhook nhan tin).
- * Cac route nay duoc bao ve boi global JWT guard.
+ * Quản lý đăng ký webhook trên Haravan; các tuyến này được bảo vệ bằng JWT.
  *
- *   POST   /webhooks/app/subscribe    -> buoc 4, khai bao app nhan thong bao
- *   DELETE /webhooks/app/subscribe    -> buoc 7, huy dang ky
- *   GET    /webhooks/app/subscribe    -> buoc 8, xem topic dang subscribe
+ *   POST   /webhooks/app/subscribe    -> đăng ký nhận thông báo
+ *   DELETE /webhooks/app/subscribe    -> hủy đăng ký
+ *   GET    /webhooks/app/subscribe    -> xem các chủ đề đã đăng ký
  */
 @ApiTags('Haravan Webhook (App) - manage')
 @Controller('webhooks/app/subscribe')
@@ -73,7 +72,7 @@ export class WebhookAppManageController {
     return res.body;
   }
 
-  /** Callback URL can dien tren partners.haravan.com/apps */
+  /** URL callback cần điền trên partners.haravan.com/apps. */
   @Get('callback-url')
   @ApiOperation({ summary: 'Callback URL de dien vao form dang ky webhook' })
   callbackUrl(): { callbackUrl: string; verifyTokenHint: string } {

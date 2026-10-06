@@ -11,12 +11,12 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    // Giữ raw body: bắt buộc để verify HMAC webhook Haravan
+    // Giữ nguyên nội dung gốc để xác thực HMAC của webhook Haravan.
     // (X-Haravan-Hmacsha256 = base64(HMAC_SHA256(raw_body, client_secret)))
     rawBody: true,
   });
 
-  // config service for env
+  // Nạp cấu hình từ biến môi trường.
   const configService = app.get(ConfigService);
 
   app.useGlobalPipes(
@@ -25,15 +25,15 @@ async function bootstrap() {
     }),
   );
 
-  // truyền metadata vào lobal guard
+  // Truyền metadata cho bộ bảo vệ toàn cục.
   const reflector = app.get('Reflector');
   app.useGlobalGuards(new JwtAuthGuard(reflector));
   app.useGlobalInterceptors(new TransformInterceptor(reflector));
 
-  // config cookie parser
+  // Cấu hình bộ phân tích cookie.
   app.use(cookieParser());
 
-  // config cors
+  // Cấu hình CORS.
   app.enableCors({
     origin: true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -41,17 +41,17 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // config versioning
+  // Cấu hình phiên bản API.
   app.setGlobalPrefix('api');
   app.enableVersioning({
     type: VersioningType.URI,
     defaultVersion: ['1', '2'],
   });
-  app.useStaticAssets(join(__dirname, '..', 'public')); // js, css, img, ...
-  app.setBaseViewsDir(join(__dirname, '..', 'views')); // views
+  app.useStaticAssets(join(__dirname, '..', 'public')); // Tệp JavaScript, CSS và hình ảnh.
+  app.setBaseViewsDir(join(__dirname, '..', 'views')); // Thư mục giao diện.
   app.setViewEngine('ejs');
 
-  // config swagger
+  // Cấu hình Swagger.
   const config = new DocumentBuilder()
     .setTitle('API documentation')
     .setDescription('Restful API')
@@ -67,7 +67,7 @@ async function bootstrap() {
     .addSecurityRequirements('token')
     .build();
 
-  // start server at port ${PORT}
+  // Khởi động máy chủ tại cổng ${PORT}.
   await app.listen(configService.get<string>('PORT'), () => {
     console.log(
       `Server is running at http://localhost:${configService.get<string>(

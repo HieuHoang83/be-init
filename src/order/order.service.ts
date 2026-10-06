@@ -62,24 +62,19 @@ export class OrderService {
     this.rule = config.rule;
   }
 
-  /* --------------------------------------------------------------- upsert */
-
-  /**
-   * Luu/cap nhat don theo (orgId, haravanOrderId) - idempotent.
-   * Harovan gui `orders/create` roi den `orders/paid`, nen payload co the
-   * den muon, va day la noi duy nhat duoc ghi de vao DB.
-   */
+  /** Lưu hoặc cập nhật đơn theo shop và ID Haravan. */
   async upsertOrder(
     orgId: number,
     payload: OrderPayload,
     source: 'webhook' | 'api' | 'manual' = 'webhook',
     topic?: string,
   ): Promise<UpsertResult> {
+    const isOrderCreatedEvent =
+      topic === 'orders/create' || topic === 'orders/created';
     const orderNumber =
       payload.order_number ?? payload.name ?? String(payload.id);
     const orderName =
       payload.name ?? payload.order_number ?? String(payload.id);
-    // KHONG gan `email`/`phone`/`customer` o day: xem buildCustomerPatch().
     const update: Record<string, unknown> = {
       orderNumber,
       orderName,
@@ -108,8 +103,6 @@ export class OrderService {
       lastWebhookTopic: topic,
     };
 
-    // Chi reset trang thai khi don CHUA xac nhan. Don da confirm thi
-    // `orders/updated` chi sua thong tin, khong chay lai worker.
     const already = await this.orderModel
       .findOne({ orgId, haravanOrderId: payload.id })
       .select('status')
@@ -119,11 +112,8 @@ export class OrderService {
       update['status'] = OrderStatus.PENDING;
     }
 
-    // Ghi tung field customer rieng le bang dot-notation.
-    // `orders/create` thuong thieu ten/sdt, `orders/updated` moi co du.
-    // Dot-notation ghi de tung field co gia tri, KHONG xoa field cu bi thieu.
     for (const [field, value] of Object.entries(
-      this.buildCustomerPatch(payload),
+      this.buildCustomerPatch(payload, isOrderCreatedEvent),
     )) {
       if (value !== undefined) update[field] = value;
     }
@@ -146,11 +136,11 @@ export class OrderService {
     return { created: true, order: doc };
   }
 
-  /**
-   * Chi lay cac field customer co gia tri that, de ghep dot-notation.
-   * Field null/absent bi bo qua -> khong ghi de du lieu da co.
-   */
-  private buildCustomerPatch(payload: OrderPayload): Record<string, unknown> {
+  /** Chỉ cập nhật các trường khách hàng có dữ liệu. */
+  private buildCustomerPatch(
+    payload: OrderPayload,
+    includeCreationSnapshot: boolean,
+  ): Record<string, unknown> {
     const c = payload.customer;
     if (!c) return {};
 
@@ -159,14 +149,11 @@ export class OrderService {
       [c.first_name, c.last_name].filter(Boolean).join(' ').trim() ||
       undefined;
 
-    // `customer.*`: chi ghi de field co gia tri, field khong co gia tri bi bo qua
-    // -> `orders/create` thieu ten khong xoa ten da luu tu `orders/updated`.
     const patch: Record<string, unknown> = {
       'customer.email': this.orNull(c.email?.toLowerCase()),
       'customer.phone': this.orNull(
         OrderService.normalizePhone(c.phone ?? payload.shipping_address?.phone),
       ),
-      'customer.ordersCount': this.orNull(c.orders_count),
       'customer.totalSpent': this.orNull(c.total_spent),
       'customer.totalPaid': this.orNull(c.total_paid),
       'customer.state': this.orNull(c.state),
@@ -174,15 +161,15 @@ export class OrderService {
       'customer.lastOrderId': this.orNull(c.last_order_id),
       'customer.lastOrderName': this.orNull(c.last_order_name),
     };
+    if (includeCreationSnapshot && c.orders_count != null) {
+      patch['customer.ordersCount'] = c.orders_count;
+    }
 
-    // `firstName`/`lastName`/`haravanId` chi ghi khi that su co, de khong
-    // lam mat gia tri da co khi payload khong nhan.
     if (c.first_name) patch['customer.firstName'] = c.first_name;
     if (c.last_name) patch['customer.lastName'] = c.last_name;
     if (fullName) patch['customer.fullName'] = fullName;
     if (c.id) patch['customer.haravanId'] = c.id;
 
-    // Cap don: de log va query nhanh
     const orderPhone = OrderService.normalizePhone(
       c.phone ?? payload.shipping_address?.phone,
     );
@@ -193,21 +180,11 @@ export class OrderService {
     return patch;
   }
 
-  /**
-   * `null` van duoc ghi de (khac `undefined`).
-   * Dung khi khach doi sdt/ten, can xoa gia tri cu.
-   */
   private orNull<T>(value: T | null | undefined): T | null {
     return value === undefined || value === null ? null : value;
   }
 
-  /* ------------------------------------------------- customer (khach quay lai) */
-
-  /**
-   * CHUAN HOA SOT DIEN THOAI - khoa so sanh khach.
-   * `0961277633`, `+84961277633`, `84 961 277 633` phai la MOT nguoi.
-   * Bo khoang trắng, dau `+`, va so 0 dau tien.
-   */
+  /** Chuẩn hóa số điện thoại để so khớp khách hàng. */
   private static normalizePhone(raw?: string | null): string | undefined {
     if (!raw) return undefined;
     const digits = String(raw).replace(/\D/g, '');
@@ -216,23 +193,14 @@ export class OrderService {
     return local.length >= 9 && local.length <= 15 ? local : undefined;
   }
 
-  /**
-   * Luu/cap nhat khach vao bang `customers`.
-   *
-   * Ly do tach rieng khoi `orders`:
-   *  - `orders/create` co the thieu ten/sdt, chi `orders/updated` moi co du
-   *  - mot khach nhieu don -> dem nhanh, khong can query
-   *  - nhieu don COD co `email: null`, nen phai khoa bang SOT DIEN THOAI
-   *
-   * Merge theo `$max` / `$set` nen chay lai nhieu lan van khong phai lam
-   * so lieu giam. Truong hop KHONG co sdt/email/id (don khach vang lai) thi
-   * bo qua - khong tao ban ghi rong.
-   */
+  /** Lưu hoặc cập nhật khách khi có ID, số điện thoại hoặc email. */
   async upsertCustomer(
     orgId: number,
     payload: OrderPayload,
     topic?: string,
   ): Promise<void> {
+    const isOrderCreatedEvent =
+      topic === 'orders/create' || topic === 'orders/created';
     const c = payload.customer;
     if (!c) return;
 
@@ -242,7 +210,6 @@ export class OrderService {
     const email = c.email?.trim().toLowerCase() || undefined;
     const haravanCustomerId = c.id ?? undefined;
 
-    // Khong co dinh danh nao -> khong gom nhom duoc, bo qua
     if (!phone && !email && !haravanCustomerId) return;
 
     const fullName =
@@ -250,7 +217,6 @@ export class OrderService {
       [c.first_name, c.last_name].filter(Boolean).join(' ').trim() ||
       undefined;
 
-    // Kiem tra ban ghi da ton tai theo bat ky khoa nao
     const or: Record<string, unknown>[] = [];
     if (haravanCustomerId) or.push({ haravanCustomerId });
     if (phone) or.push({ phone });
@@ -268,8 +234,6 @@ export class OrderService {
       lastOrderName: c.last_order_name ?? payload.order_number ?? undefined,
     };
 
-    // Chi ghi khi payload CO gia tri -> `orders/create` thieu ten khong xoa
-    // ten da ghi tu `orders/updated`.
     if (haravanCustomerId) patch['haravanCustomerId'] = haravanCustomerId;
     if (phone) patch['phone'] = phone;
     if (email) patch['email'] = email;
@@ -279,6 +243,9 @@ export class OrderService {
     if (c.state) patch['state'] = c.state;
     if (typeof c.verified_email === 'boolean')
       patch['verifiedEmail'] = c.verified_email;
+    if (isOrderCreatedEvent && c.orders_count != null) {
+      patch['haravanOrdersCount'] = c.orders_count;
+    }
 
     if (existing) {
       await this.customerModel
@@ -298,7 +265,8 @@ export class OrderService {
       infoSourceTopic: topic,
       beOrderCount: 1,
       beTotalSpent: payload.total_price ?? 0,
-      haravanOrdersCount: c.orders_count ?? 0,
+      haravanOrdersCount:
+        isOrderCreatedEvent && c.orders_count != null ? c.orders_count : 0,
       haravanTotalSpent: c.total_spent ?? 0,
     });
 
@@ -309,19 +277,13 @@ export class OrderService {
     );
   }
 
-  /**
-   * Dem so don TRUOC don hien tai cua 1 khach.
-   *
-   * Dem order da luu trong BE theo sdt/email/id. Chi loai order bi huy
-   * va order hien tai; trang thai thanh toan khong anh huong den so don.
-   */
+  /** Đếm đơn trước của khách, bỏ đơn hiện tại và đơn đã hủy. */
   async countPriorOrders(
     orgId: number,
     order: OrderDocument,
   ): Promise<{ priorOrderCount: number; priorSpent: number }> {
     const cust = order.customer;
 
-    // Match customer by Haravan ID, normalized phone, or email.
     const phone =
       OrderService.normalizePhone(cust?.phone) ??
       OrderService.normalizePhone(order.phone);
@@ -336,7 +298,6 @@ export class OrderService {
     const filter: Record<string, unknown> = {
       orgId,
       status: { $ne: OrderStatus.CANCELLED },
-      // Luon loai chinh don hien tai ra khoi ket qua
       haravanOrderId: { $ne: order.haravanOrderId },
       $or: or,
     };
@@ -354,11 +315,7 @@ export class OrderService {
     return { priorOrderCount: count, priorSpent: agg[0]?.total ?? 0 };
   }
 
-  /* ------------------------------------------------------------ evaluate */
-
-  /**
-   * Chi xac nhan khi co du order truoc chua bi huy theo lich su BE.
-   */
+  /** Kiểm tra đơn có đủ điều kiện xác nhận không. */
   async evaluateConfirmEligibility(
     orgId: number,
     order: OrderDocument,
@@ -378,10 +335,6 @@ export class OrderService {
       !order.phone
     ) {
       return skip(SkipReason.NO_CUSTOMER);
-    }
-
-    if (order.financialStatus !== 'paid') {
-      return skip(SkipReason.INVALID_PAYMENT);
     }
 
     if (
@@ -434,25 +387,18 @@ export class OrderService {
     };
   }
 
-  /**
-   * So don + tong chi tieu TRUOC don hien tai.
-   * Uu tien snapshot tu Harovan, fallback van lai DB.
-   */
-  /* -------------------------------------------------------------- process */
-
-  /**
-   * Luu don -> danh gia rule -> xac nhan neu du dieu kien.
-   * Worker goi ham nay, nen loi se nem ra de queue retry.
-   */
+  /** Lưu đơn, kiểm tra rule và xác nhận nếu đủ điều kiện. */
   async processIncomingOrder(params: {
     orgId: number;
     payload: OrderPayload;
     source?: 'webhook' | 'api' | 'manual';
     jobId?: string;
+    topic?: string;
   }): Promise<ProcessResult> {
-    const { orgId, payload, source = 'webhook', jobId } = params;
+    const { orgId, payload, source = 'webhook', jobId, topic } = params;
 
-    const { order } = await this.upsertOrder(orgId, payload, source);
+    const { order } = await this.upsertOrder(orgId, payload, source, topic);
+    await this.upsertCustomer(orgId, payload, topic);
     order.status = OrderStatus.PROCESSING;
     order.processing = { ...order.processing, source, jobId };
     await order.save();
@@ -513,12 +459,7 @@ export class OrderService {
     };
   }
 
-  /* -------------------------------------------------------------- confirm */
-
-  /**
-   * Xac nhan don tren Harovan.
-   * `force: true` (admin) bo qua qua rule, chi dung khi can xac nhan tay.
-   */
+  /** Xác nhận đơn; `force` bỏ qua rule khi admin xác nhận thủ công. */
   async confirmOrder(params: {
     orgId: number;
     haravanOrderId: number;
@@ -646,7 +587,7 @@ export class OrderService {
     }
   }
 
-  /** Fallback khi webhook payload da bi xoa: goi lai Omni API lay don day du */
+  /** Lấy đơn từ API nếu không còn payload webhook. */
   async fetchOrderFromApi(
     orgId: number,
     haravanOrderId: number,
@@ -654,8 +595,6 @@ export class OrderService {
     const res = await this.apiClient.getOrder(orgId, haravanOrderId);
     return res.body;
   }
-
-  /* ---------------------------------------------------------------- query */
 
   async findOrderById(
     orgId: number,
@@ -686,17 +625,7 @@ export class OrderService {
     return { items: rows, total, page, limit };
   }
 
-  /**
-   * Them cot "khach da co don truoc day chua" cho tung dong trong danh sach.
-   *
-   * Khong dua thang vao `Order` schema vi:
-   *   - phai tinh lai moi lan doc, khong bao gio stale
-   *   - `processing.isReturningCustomer` da co san, chi can day ra de doc
-   *
-   * Uu tien dung `processing.isReturningCustomer` (worker da tinh luc xu ly
-   * don, dung nguon hon `haravanOrdersCount` cua Harovan). Don chua qua worker
-   * thi tinh on fly tu so don truoc cung so dien thoai / customer id.
-   */
+  /** Bổ sung tên đơn và lịch sử mua của khách vào danh sách. */
   private async attachCustomerHistory(
     items: OrderDocument[],
   ): Promise<unknown[]> {
@@ -706,17 +635,38 @@ export class OrderService {
       items.map(async (order) => {
         const doc = order.toObject() as unknown as Record<string, unknown>;
         const processing = (doc['processing'] ?? {}) as Record<string, unknown>;
+        const hasCustomerIdentity = Boolean(
+          order.customer?.haravanId ||
+            order.customer?.email?.trim() ||
+            order.customer?.phone?.trim() ||
+            order.email?.trim() ||
+            order.phone?.trim(),
+        );
+        const name =
+          order.orderName ??
+          order.orderNumber ??
+          String(order.haravanOrderId);
+        const payloadOrderNumber = Number(order.customer?.ordersCount);
 
         if (typeof processing['isReturningCustomer'] === 'boolean') {
+          const priorOrderCount = Number(
+            processing['priorOrderCount'] ?? 0,
+          );
           return {
             ...doc,
+            name,
             isReturningCustomer: processing['isReturningCustomer'],
-            priorOrderCount: processing['priorOrderCount'] ?? 0,
+            priorOrderCount,
             priorSpent: processing['priorSpent'] ?? 0,
+            customerOrderNumber:
+              Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
+                ? payloadOrderNumber
+                : hasCustomerIdentity
+                  ? priorOrderCount + 1
+                  : null,
           };
         }
 
-        // Chua qua worker -> tu dem don truoc
         const { priorOrderCount } = await this.countPriorOrders(
           order.orgId,
           order,
@@ -725,9 +675,16 @@ export class OrderService {
 
         return {
           ...doc,
+          name,
           isReturningCustomer: isReturning,
           priorOrderCount,
           priorSpent: processing['priorSpent'] ?? 0,
+          customerOrderNumber:
+            Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
+              ? payloadOrderNumber
+              : hasCustomerIdentity
+                ? priorOrderCount + 1
+                : null,
         };
       }),
     );
@@ -781,8 +738,6 @@ export class OrderService {
     };
   }
 
-  /* ----------------------------------------------------------- action log */
-
   private async logAction(
     orgId: number,
     haravanOrderId: number,
@@ -812,7 +767,7 @@ export class OrderService {
     return doc._id;
   }
 
-  /** Ghi nhan don de replay webhook that bai */
+  /** Tìm đơn để chạy lại webhook lỗi. */
   async requireOrder(
     orgId: number,
     haravanOrderId: number,

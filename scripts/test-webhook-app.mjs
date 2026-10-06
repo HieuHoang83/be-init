@@ -1,10 +1,10 @@
 /**
- * Test thu WEBHOOK KET NOI APP (khong phai webhook rieng tu).
+ * Kiểm tra thử webhook ứng dụng (không phải webhook riêng tư).
  *
  *   node scripts/test-webhook-app.mjs [baseUrl]
  *
- * Mac dinh baseUrl = http://localhost:3000
- * Can app chay: npm run start:dev
+ * Mặc định baseUrl là http://localhost:3000.
+ * Cần khởi động ứng dụng bằng npm run start:dev trước.
  */
 import { createHmac } from 'node:crypto';
 

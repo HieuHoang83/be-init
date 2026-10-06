@@ -2,14 +2,13 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Ghi log payload webhook ra file de debug.
- * Console cua app chay o terminal khac, file thi doc duoc tu moi noi.
+ * Ghi thông tin webhook vào tệp để tiện kiểm tra.
  */
 const LOG_DIR = join(process.cwd(), 'logs');
 const LOG_FILE = join(LOG_DIR, 'webhook.log');
 const MAX_RAW = 20_000;
 
-/** Ten gon de doc nhanh trong log */
+/** Tên hiển thị ngắn gọn trong log. */
 const KIND_LABEL: Record<string, string> = {
   private: 'Webhook rieng tu (Haravan admin)',
   app: 'Webhook ket noi App (co subscribe)',
@@ -20,13 +19,11 @@ export interface WebhookLogInput {
   /** 'app' | 'private' | 'subscribe' */
   kind: keyof typeof KIND_LABEL | string;
   /**
-   * Loai luong, de phan biet ngay trong log:
-   *  - `verify_token`      GET  ?hub.mode=subscribe&hub.verify_token&hub.challenge
-   *                        Dung HARAVAN_APP_VERIFY_TOKEN, chi mot lan luc cai app.
-   *  - `event_notification` POST co X-Haravan-Hmacsha256 + X-Haravan-Topic
-   *                        Event that tu Haravan moi don, KHONG co verify token.
-   *  - `hmac_rejected`     POST bi tu choi vi chu ky sai -> status 401
-   *  - `oauth_callback`    GET /webhooks/callback?code=...
+   * Loại luồng để phân biệt các bước trong log:
+   *  - `verify_token`: GET đăng ký ứng dụng bằng hub.verify_token và hub.challenge.
+   *  - `event_notification`: POST webhook đơn hàng có chữ ký HMAC.
+   *  - `hmac_rejected`: POST bị từ chối do chữ ký không hợp lệ.
+   *  - `oauth_callback`: GET trả về từ bước OAuth.
    */
   flow?:
     | 'verify_token'
@@ -34,7 +31,7 @@ export interface WebhookLogInput {
     | 'hmac_rejected'
     | 'oauth_callback'
     | string;
-  /** `received` = guard xac nhan da nhan; `processed` = controller xu ly xong */
+  /** `received`: guard đã nhận yêu cầu; `processed`: controller đã xử lý xong. */
   stage?: 'received' | 'processed';
   method?: string | null;
   path?: string | null;

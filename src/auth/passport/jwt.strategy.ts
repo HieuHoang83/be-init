@@ -14,7 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  // trả về response sau khi xác thực token thành công
+  // Trả về thông tin người dùng sau khi xác thực token thành công.
   async validate(payload: IUser) {
     const { id, phone, name, roleName } = payload;
 

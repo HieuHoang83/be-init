@@ -14,7 +14,7 @@ export enum WebhookPrivateStatus {
 
 @Schema({ collection: 'webhook_events', timestamps: true })
 export class WebhookPrivateEvent {
-  /** org_id tu Harovan, null neu payload khong hop le */
+  /** org_id do Haravan gửi; null nếu payload không hợp lệ. */
   @Prop({ index: true })
   orgId?: number | null;
 
@@ -24,7 +24,7 @@ export class WebhookPrivateEvent {
   @Prop({ index: true })
   haravanOrderId?: number | null;
 
-  /** HMAC da verify thanh cong truoc khi luu */
+  /** Cho biết HMAC đã được xác thực trước khi lưu. */
   @Prop({ default: true })
   hmacVerified!: boolean;
 
@@ -36,11 +36,11 @@ export class WebhookPrivateEvent {
 
   @Prop() error?: string;
 
-  /** Chi luu header can cho audit, khong luu secret */
+  /** Chỉ lưu header cần kiểm tra; không lưu secret. */
   @Prop({ type: Object })
   headers?: Record<string, string>;
 
-  /** Payload goc, dung de replay */
+  /** Payload gốc dùng để chạy lại sự kiện. */
   @Prop({ type: Object })
   payload!: WebhookEnvelope;
 

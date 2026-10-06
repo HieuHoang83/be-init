@@ -8,7 +8,6 @@ import { JwtService } from '@nestjs/jwt';
 import { IUser } from 'src/interface/users.interface';
 import { ConfigService } from '@nestjs/config';
 import { Request, Response } from 'express';
-import { genSaltSync, hashSync } from 'bcryptjs';
 import { UserLoginDto } from './dto/login-user.dto';
 import { UserService } from 'src/user/user.service';
 import { UpdatePasswordDto } from 'src/user/dto/update-password.dto';
@@ -22,28 +21,23 @@ export class AuthService {
     private readonly userService: UserService,
   ) {}
 
-  // Ham hash password
-  private hashPassword(password: string): string {
-    return hashSync(password, genSaltSync(10));
-  }
-
-  // Tao refresh token
+  // Tạo refresh token.
   createRefreshToken(payload: object): string {
     return this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_REFRESH_TOKEN_SECRET'),
-      expiresIn: this.configService.get('JWT_REFRESH_EXPIRE'),
+      expiresIn: this.configService.get('JWT_REFRESH_EXPIRE', '7d'),
     });
   }
 
-  // Tao access token
+  // Tạo access token.
   createAccessToken(payload: object): string {
     return this.jwtService.sign(payload, {
       secret: this.configService.get('JWT_ACCESS_TOKEN_SECRET'),
-      expiresIn: this.configService.get('JWT_ACCESS_EXPIRE'),
+      expiresIn: this.configService.get('JWT_ACCESS_EXPIRE', '15m'),
     });
   }
 
-  // Dang ky user moi
+  // Đăng ký người dùng mới.
   async registerUser(dto: UserRegisterDto) {
     const existing = await this.userService.findOneByPhone(dto.phone).catch(() => null);
     if (existing) {
@@ -58,7 +52,7 @@ export class AuthService {
     const user = await this.userService.create({
       name: dto.name,
       phone: dto.phone,
-      password: this.hashPassword(dto.password),
+      password: dto.password,
       avatar: dto.avatar,
       roleId: role._id.toString(),
     });
@@ -67,7 +61,7 @@ export class AuthService {
     return { ...rest, role: userRole.name };
   }
 
-  // Dang nhap user, tra ve user info + token
+  // Đăng nhập và trả về thông tin người dùng cùng token.
   async login(userLoginDto: UserLoginDto) {
     const { phone, password } = userLoginDto;
 
@@ -103,7 +97,7 @@ export class AuthService {
     return this.userService.login(username, password);
   }
 
-  // Xu ly refresh token lay token moi
+  // Xác thực refresh token và cấp token mới.
   verifyRefreshToken(refreshToken: string) {
     const secret = this.configService.get<string>('JWT_REFRESH_TOKEN_SECRET');
 
@@ -123,7 +117,7 @@ export class AuthService {
       throw new BadRequestException('Refresh token is missing');
     }
 
-    // Verify chu ky truoc, roi moi tim user
+    // Xác thực chữ ký trước, sau đó mới tìm người dùng.
     this.verifyRefreshToken(refreshToken);
 
     const user = await this.userService.findOneByRefreshToken(refreshToken);
@@ -145,14 +139,14 @@ export class AuthService {
     return { access_token: this.createAccessToken(payload) };
   }
 
-  // Dang xuat user
+  // Đăng xuất người dùng.
   async logout(user: IUser, response: Response) {
     await this.userService.updateRefreshToken(user.id, '');
     response.clearCookie('refresh_token');
     return true;
   }
 
-  // Cap nhat mat khau user
+  // Cập nhật mật khẩu người dùng.
   async updatePassword(userId: string, dto: UpdatePasswordDto) {
     await this.userService.updatePassword(userId, dto);
     return true;

@@ -1,17 +1,5 @@
 import { registerAs } from '@nestjs/config';
 
-/**
- * Cau hinh MongoDB.
- *
- * Uu tien theo thu tu:
- *  1. MONGODB_URI         - neu biet san URI day du (co ca database name)
- *  2. MONGODB_USERNAME +
- *     MONGODB_PASSWORD + MONGODB_CLUSTER - ghep URI SRV tu may
- *  3. fallback localhost:27017
- *
- * `atlas-credentials.env` (sinh ra boi MongoDB Atlas) cung cap MONGODB_USERNAME /
- * MONGODB_PASSWORD / MONGODB_URI nen duoc nap qua envFilePath o ConfigModule.
- */
 export interface MongoConfig {
   uri: string;
   dbName: string;
@@ -41,7 +29,6 @@ export const mongoConfig = registerAs('mongo', (): MongoConfig => {
     uri = `mongodb://localhost:27017/${dbName}`;
   }
 
-  // URI tu Atlas onboarding thuong khong co ten database -> append vao
   const hasDbName = /^mongodb(\+srv)?:\/\/[^/]+\/[^/?]+/.test(uri);
   if (!hasDbName) {
     uri = uri.replace(/\/+$/, '') + `/${dbName}`;
@@ -52,7 +39,6 @@ export const mongoConfig = registerAs('mongo', (): MongoConfig => {
     dbName,
     options: {
       dbName,
-      // Atlas yeu cau cac tuy chon nay de connection duoc on dinh
       retryWrites: true,
       w: 'majority',
       maxPoolSize: 20,
@@ -62,5 +48,4 @@ export const mongoConfig = registerAs('mongo', (): MongoConfig => {
   };
 });
 
-/** Key dung de configService.get() trong module */
 export const MONGO_CONFIG_KEY = mongoConfig.KEY;

@@ -7,12 +7,7 @@ import { Job, JobSchema } from './job.entity';
 import { MongoJobQueue } from './mongo-job-queue.service';
 import { JobQueue } from './queue.service';
 
-/**
- * Hang doi cong viec luu trong MongoDB.
- *
- * Doi backend hang doi: chi doi `useClass` ben duoi. Controller va worker
- * chi lam viec voi abstraction `JobQueue` nen khong phai sua dong nao.
- */
+/** Module hàng đợi công việc dùng MongoDB. */
 @Module({
   imports: [
     ConfigModule.forFeature(appConfig),

@@ -7,17 +7,14 @@ import { appConfig } from '../config';
 import { Shop, ShopDocument } from '../webhook-app/webhook-app.entity';
 
 /**
- * Noi lay `haravan-access-token` theo tung shop.
- *
- * Phase 1 (single shop): doc token tu env.
- * Phase 2 (multi shop): tra token da decrypt tu bang `shops`,
- * kem TTL cache de khong phai goi Haravan moi request.
+ * Lấy `haravan-access-token` theo từng shop.
+ * Ưu tiên token trong cơ sở dữ liệu, sau đó mới dùng token trong biến môi trường.
  */
 @Injectable()
 export class AccessTokenStore {
   private readonly logger = new Logger(AccessTokenStore.name);
 
-  /** orgId -> token, cho multi-shop o phase sau */
+  /** Bộ nhớ đệm ánh xạ mã shop sang token. */
   private readonly cache = new Map<number, { token: string; expiresAt: number }>();
 
   private readonly envToken: string;
@@ -37,7 +34,7 @@ export class AccessTokenStore {
       return cached.token;
     }
 
-    // Token tu OAuth callback (da luu o `shops`) duoc uu tien hon env
+    // Ưu tiên token từ OAuth callback đã lưu trong `shops` hơn biến môi trường.
     const stored = await this.loadFromDb(orgId);
     if (stored) return stored;
 
@@ -49,7 +46,7 @@ export class AccessTokenStore {
     throw new UnauthorizedException(`Chua cau hinh access token cho shop ${orgId}`);
   }
 
-  /** Doc token da luu tu OAuth callback trong collection `shops` */
+  /** Đọc token do OAuth callback lưu trong collection `shops`. */
   private async loadFromDb(orgId: number): Promise<string | null> {
     const shop = await this.shopModel
       .findOne({ orgId })
@@ -69,7 +66,7 @@ export class AccessTokenStore {
     return shop.accessToken;
   }
 
-  /** Luu token vua doi xuong DB de dung qua lan restart */
+  /** Lưu token vừa đổi vào cơ sở dữ liệu để dùng lại sau khi khởi động lại. */
   async persist(
     orgId: number,
     token: string,
@@ -95,7 +92,7 @@ export class AccessTokenStore {
     this.set(orgId, token, (expiresInSec ?? 3600) * 1000);
   }
 
-  /** Dung ngay khi vừa doi token trong admin UI */
+  /** Cập nhật bộ nhớ đệm ngay sau khi đổi token trong trang quản trị. */
   set(orgId: number, token: string, ttlMs = 55 * 60 * 1000): void {
     this.cache.set(orgId, { token, expiresAt: Date.now() + ttlMs });
   }

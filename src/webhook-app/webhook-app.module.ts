@@ -4,6 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { appConfig } from '../config';
 import { ApiModule } from '../api/api.module';
 import { OrderModule } from '../order/order.module';
+import { QueueModule } from '../queue/queue.module';
 import { WebhookPrivateModule } from '../webhook-private/webhook-private.module';
 import { WebhookAppController } from './webhook-app.controller';
 import { WebhookAppManageController } from './webhook-app-manage.controller';
@@ -18,16 +19,17 @@ import {
 } from './webhook-app.entity';
 
 /**
- * Webhook KET NOI APP: co buoc subscribe (hub.verify_token / hub.challenge).
- * Khac hoan toan voi webhook rieng tu o `webhook-private`.
+ * Module nhận webhook của ứng dụng, đăng ký qua hub.verify_token và
+ * hub.challenge. Khác với webhook riêng tư trong `webhook-private`.
  */
 @Module({
   imports: [
     ConfigModule.forFeature(appConfig),
     ApiModule,
     OrderModule,
-    // `WebhookPrivateService` la noi luu payload de worker tai lai.
-    // App KHONG dung guard cua module nay - guard HMAC nam o controller rieng.
+    QueueModule,
+    // WebhookPrivateService lưu payload để worker tải lại.
+    // Webhook ứng dụng dùng guard HMAC riêng trong controller của module này.
     WebhookPrivateModule,
     MongooseModule.forFeature([
       { name: AppInstallation.name, schema: AppInstallationSchema },

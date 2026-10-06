@@ -20,14 +20,14 @@ import { WebhookPrivateHmacGuard } from './webhook-private.guard';
 import { WebhookPrivateStatus } from './webhook-private.entity';
 import { WebhookPrivateService } from './webhook-private.service';
 
-/** Chi topic don hang moi can chay tiep xu ly */
+/** Chỉ xử lý tiếp các chủ đề liên quan đến đơn hàng. */
 const TOPICS_TO_PROCESS = new Set<string>([
   TOPICS.ORDER_CREATE,
   TOPICS.ORDER_UPDATE,
   TOPICS.ORDER_PAID,
 ]);
 
-/** Chi luu header can cho audit, khong luu secret */
+/** Chỉ lưu các header cần kiểm tra; không lưu secret. */
 function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers ?? {})) {
@@ -37,23 +37,20 @@ function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
 }
 
 /**
- * WEBHOOK RIENG TU (private webhook).
+ * Webhook riêng tư.
  *
- * Khac voi "webhook ket noi app": khong co buoc subscribe, khong co
- * hub.verify_token / hub.challenge. Chu nhan bi tu dang ky trong
- * trang quan tri -> Cau hinh -> Thong bao -> Webhooks, roi dien callback
- * URL HTTPS cua app. Harovan chi gui POST.
+ * Khác với webhook ứng dụng, loại này không cần đăng ký bằng
+ * hub.verify_token hoặc hub.challenge. Chủ shop tự cấu hình trong
+ * Cấu hình -> Thông báo -> Webhooks và nhập URL HTTPS của ứng dụng.
+ * Haravan chỉ gửi yêu cầu POST.
  *
- * Chung nghuyen:
- *  - Chi HTTPS
- *  - Xac thuc bang `X-Haravan-Hmacsha256`
- *    = base64(HMAC_SHA256(raw_body, webhook authentication secret))
- *  - Phai tra 200. Moi thu khac (ke ca 3XX) bi co la that bai,
- *    Harovan retry 19 lan trong 48h; 19 lan that bai lien tiep se
- *    XOA DANG KY webhook.
+ * Chữ ký dùng `X-Haravan-Hmacsha256` =
+ * base64(HMAC_SHA256(raw_body, webhook authentication secret)).
+ * Phải trả về 200; mã khác, kể cả 3xx, được xem là thất bại. Haravan thử lại
+ * tối đa 19 lần trong 48 giờ và có thể xóa đăng ký sau 19 lần thất bại liên tiếp.
  *
- * Vì vậy controller CHI validate + ghi audit + day queue roi tra 200 ngay.
- * Moi thao tac goi Omni API (confirm) chay o OrderWorker.
+ * Vì vậy controller chỉ kiểm tra, lưu lịch sử, đưa việc vào hàng đợi rồi trả
+ * 200 ngay. Các thao tác gọi Omni API được xử lý trong OrderWorker.
  */
 @ApiTags('Haravan Webhook')
 @Controller('webhooks/haravan')
@@ -93,7 +90,7 @@ export class WebhookPrivateController {
       error = (e as Error).message;
     }
 
-    // Payload test cua Harovan khong co du lieu don that -> chi audit, khong xu ly
+    // Payload kiểm tra của Haravan không có đơn thật; chỉ ghi nhận, không xử lý.
     if (meta.isTest) {
       error = 'payload test (X-Haravan-Test), bo qua xu ly don';
     }
@@ -144,7 +141,7 @@ export class WebhookPrivateController {
         result: { eventId, outcome: 'invalid_payload' },
         error: error ?? undefined,
       });
-      // Van tra 200 de Haravan khong retry lien tuc mot payload hong
+      // Vẫn trả 200 để Haravan không gửi lại liên tục payload lỗi.
       return { received: true, eventId, status: 'invalid_payload' };
     }
 

@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 export const HMAC_HEADER = 'x-haravan-hmacsha256';
 
 /**
- * Tinh chuoi HMAC-SHA256 roi ma hoa base64.
+ * Tính HMAC-SHA256 rồi mã hóa kết quả bằng Base64.
  *
  * Haravan ky webhook bang header `X-Haravan-Hmacsha256` =
  *   base64(HMAC_SHA256(raw_body, client_secret))
@@ -16,8 +16,8 @@ export function computeHmac(rawBody: Buffer | string, clientSecret: string): str
 }
 
 /**
- * So sanh chuoi HMAC an toan truoc timing attack.
- * Luon tra false (khong nem loi) neu chuoi sai do dai.
+ * So sánh HMAC an toàn trước tấn công đo thời gian.
+ * Trả về `false` nếu độ dài chuỗi không khớp.
  */
 export function verifyHmac(
   rawBody: Buffer | string,

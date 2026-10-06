@@ -4,10 +4,10 @@ import { HmacGuard } from '../core/webhook-hmac.guard';
 import { appConfig } from '../config';
 
 /**
- * Verify HMAC cho WEBHOOK RIENG TU.
+ * Xác thực HMAC cho webhook riêng tư.
  *
- * Secret lay tu `webhook authentication secret` copy trong trang quan tri
- * (Cau hinh -> Thong bao -> Webhooks). Khong co buoc subscribe.
+ * Secret lấy tại Cấu hình -> Thông báo -> Webhooks trong trang quản trị.
+ * Loại webhook này không cần bước đăng ký.
  */
 export class WebhookPrivateHmacGuard extends HmacGuard {
   protected readonly logKind = 'private' as const;

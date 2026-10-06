@@ -10,7 +10,7 @@ import { UpdatePasswordDto } from './dto/update-password.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { Role, RoleDocument, User, UserDocument } from './user.entity';
 
-/** User kem role da populate, dung cho login/response */
+/** Người dùng kèm vai trò đã tải, dùng cho đăng nhập và phản hồi API. */
 export interface UserWithRole extends UserDocument {
   role: RoleDocument;
 }
@@ -30,7 +30,7 @@ export class UserService {
     return compareSync(password, hash);
   }
 
-  /** Password luon `select: false` nen phai truyen `+password` khi can so sanh */
+  /** Mật khẩu mặc định không được truy vấn; cần thêm `+password` khi so sánh. */
   private findByIdRaw(id: string) {
     return this.userModel
       .findById(id)
@@ -58,7 +58,7 @@ export class UserService {
     return user as UserWithRole;
   }
 
-  /** Tim role theo ten, dung khi dang ky user moi */
+  /** Tìm vai trò theo tên khi đăng ký người dùng mới. */
   async findRoleByName(name: string): Promise<RoleDocument | null> {
     return this.roleModel.findOne({ name }).exec();
   }
@@ -70,13 +70,18 @@ export class UserService {
     avatar?: string;
     roleId: string;
   }): Promise<UserWithRole> {
+    const { roleId, ...userData } = data;
     return (await this.userModel
-      .create({ ...data, password: this.hashPassword(data.password) })
+      .create({
+        ...userData,
+        role: roleId,
+        password: this.hashPassword(data.password),
+      })
       .then((u) => u.populate('role'))) as UserWithRole;
   }
 
   async login(phone: string, password: string): Promise<UserWithRole> {
-    // Can `+password` de so sanh, nen tai lai theo chinh phone
+    // Tải lại theo số điện thoại và lấy mật khẩu để so sánh.
     const user = await this.userModel
       .findOne({ phone })
       .select('+password')
@@ -91,7 +96,7 @@ export class UserService {
       throw new BadRequestException('username or password is incorrect');
     }
 
-    // Xoa truoc khi tra ve
+    // Xóa mật khẩu trước khi trả kết quả.
     delete (user as unknown as { password?: string }).password;
     return user as UserWithRole;
   }
@@ -112,7 +117,7 @@ export class UserService {
       throw new NotFoundException('User not found');
     }
 
-    // Khong tra ve password cho client
+    // Không trả mật khẩu cho phía gọi API.
     delete (user as unknown as { password?: string }).password;
     return user;
   }

@@ -5,21 +5,21 @@ import { Customer, CustomerDocument } from '../order/customer.entity';
 import { Order, OrderDocument, OrderStatus } from '../order/order.entity';
 
 export interface CustomerStats {
-  /** Tong so khach dang co trong he thong */
+  /** Tổng số khách hiện có trong hệ thống. */
   total: number;
-  /** Khach moi trong 30 ngay qua (theo lan dau thay) */
+  /** Khách lần đầu xuất hiện trong 30 ngày gần nhất. */
   newLast30Days: number;
-  /** Khach da mua it nhat 2 don */
+  /** Khách đã mua ít nhất hai đơn. */
   returning: number;
-  /** Khach moi dung 1 don */
+  /** Khách mới chỉ mua một đơn. */
   firstTime: number;
-  /** Khach co it nhat 1 don da xac nhan */
+  /** Khách có ít nhất một đơn đã xác nhận. */
   withConfirmedOrders: number;
-  /** Doanh so don cua khach da xac nhan */
+  /** Tổng giá trị các đơn đã xác nhận của khách. */
   confirmedRevenue: number;
-  /** Khach chua co so dien thoai - can chay `orders/updated` de bu du */
+  /** Khách chưa có số điện thoại; cần nhận webhook `orders/updated` để bổ sung. */
   missingPhone: number;
-  /** Khach chua co ten */
+  /** Khách chưa có tên. */
   missingName: number;
   byOrg: { orgId: number; total: number; returning: number }[];
 }
@@ -29,16 +29,16 @@ export interface CustomerListQuery {
   search?: string;
   page?: number;
   limit?: number;
-  /** Loc khach quay lai / khach moi */
+  /** Lọc khách cũ hoặc khách mới. */
   kind?: 'returning' | 'first_time' | 'all';
   sort?: 'newest' | 'lastSeen' | 'spent' | 'orders';
 }
 
 /**
- * Doc so lieu khach hang.
+ * Cung cấp số liệu và danh sách khách hàng.
  *
- * Customer duoc gom tu moi don webhook (create + updated) nen bang `customers`
- * la nguon dem khach chinh - dem `orders` se dem trung vi mot khach nhieu don.
+ * Thông tin khách được tổng hợp từ các webhook tạo và cập nhật đơn. Vì vậy,
+ * collection `customers` là nguồn đếm chính; đếm đơn hàng sẽ tính trùng khách.
  */
 @Injectable()
 export class CustomerService {
@@ -51,10 +51,10 @@ export class CustomerService {
   ) {}
 
   /**
-   * So lieu tong quan. Dung cho dashboard va bao cao dinh ky.
+   * Lấy số liệu tổng quan cho bảng điều khiển và báo cáo.
    *
-   * `returning` phai noi "da mua >= 2 don": `haravanOrdersCount` da gom ca don
-   * hien tai cua khach, nen nguong la 2 chu khong phai 1.
+   * Khách cũ là người đã mua ít nhất hai đơn. `haravanOrdersCount` đã gồm
+   * đơn hiện tại nên ngưỡng phải là 2, không phải 1.
    */
   async getStats(orgId?: number): Promise<CustomerStats> {
     const scope = orgId ? { orgId } : {};
@@ -121,7 +121,7 @@ export class CustomerService {
     };
   }
 
-  /** Tach theo shop - phuc vu khi mot BE nhieu org. */
+  /** Tách dữ liệu theo shop để hỗ trợ nhiều cửa hàng. */
   private async byOrg(onlyOrg?: number): Promise<CustomerStats['byOrg']> {
     const rows = await this.customerModel.aggregate<{
       _id: number;
@@ -148,7 +148,7 @@ export class CustomerService {
     }));
   }
 
-  /** Danh sach khach co phan trang + tim theo ten/sdt. */
+  /** Lấy danh sách khách có phân trang và tìm theo tên hoặc số điện thoại. */
   async findAll(query: CustomerListQuery): Promise<{
     items: Record<string, unknown>[];
     total: number;
@@ -164,7 +164,7 @@ export class CustomerService {
 
     if (query.search?.trim()) {
       const raw = query.search.trim();
-      // `0961277633` va `84961277633` phai ra cung mot khach
+      // Hai dạng số điện thoại `0961277633` và `84961277633` phải trỏ đến cùng một khách.
       const digits = raw.replace(/\D/g, '');
       const phoneVariants = [
         raw,
@@ -213,10 +213,10 @@ export class CustomerService {
   }
 
   /**
-   * Chi tiet 1 khach + don cua khach do.
+   * Lấy thông tin một khách hàng và các đơn của khách đó.
    *
-   * Tim bang sdt truoc (`normalizePhone` da chuan hoa khi luu), sau do thu
-   * `haravanCustomerId` va `email` phong khi du lieu nhieu nguon lech nhau.
+   * Tìm theo số điện thoại đã chuẩn hóa trước, sau đó thử `haravanCustomerId`
+   * và email để phòng trường hợp dữ liệu từ các nguồn không đồng nhất.
    */
   async findOneWithOrders(
     orgId: number,

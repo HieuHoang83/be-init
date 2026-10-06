@@ -18,10 +18,7 @@ import { JOB_NAMES } from '../queue/queue.service';
 import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
 import { ConfirmOrderBody, ListOrdersQuery } from './dto/order.dto';
 
-/**
- * API quan tri don hang. Global JwtAuthGuard trong main.ts da bao ve
- * tat ca route nay, khong can @Public() o day.
- */
+/** API quản lý đơn hàng. */
 @ApiTags('Haravan Orders')
 @Controller('orders')
 export class OrderController {
@@ -32,7 +29,11 @@ export class OrderController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: 'Danh sach don hang da luu' })
+  @ApiOperation({
+    summary: 'Danh sach don hang da luu',
+    description:
+      'Moi don co name (ten don Haravan) va customerOrderNumber (uu tien customer.orders_count tu payload, du phong bang lich su BE).',
+  })
   @ApiQuery({ name: 'orgId', required: false, type: Number })
   async list(@Query() query: ListOrdersQuery) {
     const filter: Record<string, unknown> = {};
@@ -98,7 +99,7 @@ export class OrderController {
     return this.orderService.findActions(orgId, haravanOrderId, 200);
   }
 
-  /** Xac nhan tay, khong can khach quay lai */
+  /** Admin xác nhận đơn thủ công. */
   @Post(':orgId/:haravanOrderId/confirm')
   @ApiOperation({ summary: 'Xac nhan don thu cong qua Haravan API' })
   async confirm(
@@ -126,7 +127,7 @@ export class OrderController {
     };
   }
 
-  /** Chay lai xu ly cho webhook da nhan (dung khi job fail) */
+  /** Chạy lại webhook lỗi. */
   @Post('webhooks/:eventId/replay')
   @ApiOperation({ summary: 'Chay lai xu ly mot webhook da nhan' })
   async replay(@Param('eventId') eventId: string) {

@@ -8,7 +8,7 @@ export interface HmacRequest extends Request {
   rawBody?: Buffer;
 }
 
-/** Header can xem khi debug */
+/** Chỉ giữ lại các header cần xem khi kiểm tra lỗi. */
 function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers ?? {})) {
@@ -18,20 +18,20 @@ function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
 }
 
 /**
- * Base guard verify HMAC-SHA256 cua Harovan tren RAW BODY:
+ * Guard cơ sở xác thực HMAC-SHA256 của Haravan trên nội dung gốc:
  *
  *   X-Haravan-Hmacsha256 = base64(HMAC_SHA256(raw_body, secret))
  *
- * Raw body bat buoc: Harovan ky tren byte-for-byte, JSON.stringify lai se
- * khac -> fail. `rawBody: true` da bat trong main.ts.
+ * Phải dùng nội dung gốc vì Haravan ký theo từng byte; chuyển lại thành JSON
+ * có thể làm thay đổi dữ liệu. `rawBody: true` đã được bật trong main.ts.
  *
- * Subclass implement `resolveSecret(orgId)` vi moi loai webhook lay secret
- * o noi khac nhau.
+ * Lớp kế thừa cài đặt `resolveSecret(orgId)` vì mỗi loại webhook lấy secret
+ * từ một nơi khác nhau.
  */
 export abstract class HmacGuard implements CanActivate {
   protected readonly logger = new Logger(this.constructor.name);
 
-  /** 'app' | 'private' - de phan biet trong logs/webhook.log */
+  /** Phân biệt webhook ứng dụng với webhook riêng tư trong log. */
   protected abstract readonly logKind: 'app' | 'private';
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -45,11 +45,11 @@ export abstract class HmacGuard implements CanActivate {
     const orgId = meta.orgId;
     const picked = pickHeaders(req.headers);
 
-    /** Ghi log TRUOC khi verify - de request bi tu choi van con lai du lieu */
+    /** Ghi nhận yêu cầu trước khi xác thực để vẫn có dữ liệu khi bị từ chối. */
     const trace = (status: number, error?: string) =>
       logWebhookPayload({
         kind: this.logKind,
-        // GET co hub.* = buoc verify_token. POST co HMAC = event that.
+        // GET có hub.* là bước xác thực token; POST có HMAC là thông báo webhook.
         flow:
           status !== 200
             ? 'hmac_rejected'
@@ -98,9 +98,8 @@ export abstract class HmacGuard implements CanActivate {
     return true;
   }
 
-  /** Secret dung de ky HMAC cho shop nay. */
+  /** Lấy secret dùng để ký HMAC cho shop này. */
   protected abstract resolveSecret(
     orgId: number | null,
   ): string | null | Promise<string | null>;
 }
-

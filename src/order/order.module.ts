@@ -16,7 +16,7 @@ import {
 } from './order.entity';
 import { Customer, CustomerSchema } from './customer.entity';
 
-/** Luu don, danh gia rule khach quay lai, xac nhan don. */
+/** Module xử lý đơn hàng. */
 @Module({
   imports: [
     ConfigModule.forFeature(appConfig),

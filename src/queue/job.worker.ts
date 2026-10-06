@@ -15,18 +15,18 @@ interface RunningSlot {
 }
 
 /**
- * Worker chay job tu MongoDB.
+ * Worker xử lý công việc lấy từ MongoDB.
  *
- * Vong lap don gian, dung y intentionally:
+ * Vòng lặp xử lý:
  *
  *   poll -> claim(job) -> dispatch(job) -> complete | fail
  *
- * `claim` la atomic nen worker khong can khoa. Muon chay nhieu instance
- * (PM2 cluster, may khac) thi moi instance tu poll, Mongo chia job.
+ * Thao tác `claim` là nguyên tử nên worker không cần tự khóa. Khi chạy nhiều
+ * tiến trình, mỗi tiến trình tự tìm việc và MongoDB phân chia công việc.
  *
- * Heartbeat chay song song voi handler: handler don (goi Omni API) co the
- * treo > leaseMs, neu khong nap lai `heartbeatAt` thi job bi chinh no
- * reclaim va chay lai 2 lan.
+ * Tín hiệu hoạt động được gia hạn song song với hàm xử lý. Nếu hàm xử lý
+ * kéo dài quá `leaseMs` mà không gia hạn, công việc có thể bị thu hồi và chạy
+ * đồng thời ở worker khác.
  */
 @Injectable()
 export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
@@ -63,20 +63,20 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
       this.cfg.pollIntervalMs,
     );
 
-    // Quet ngay luc khoi dong, sau do quet theo chu ky cau hinh.
+    // Quét ngay khi khởi động, sau đó quét theo chu kỳ đã cấu hình.
     void this.reclaim();
     this.reclaimTimer = setInterval(
       () => void this.reclaim(),
       this.cfg.reclaimIntervalMs,
     );
 
-    // Claim ngay mot lan thay vi doi 1 giay
+    // Thử nhận việc ngay, không cần chờ đến chu kỳ tiếp theo.
     void this.pump();
   }
 
-  /* ------------------------------------------------------------------ loop */
+  /* ------------------------------- Vòng lặp xử lý */
 
-  /** Lay job cho den khi het hang hoac cham concurrency. */
+  /** Nhận việc cho đến khi hàng đợi trống hoặc đạt giới hạn chạy đồng thời. */
   private async pump(): Promise<void> {
     if (this.pumping || this.stopping) return;
     this.pumping = true;
@@ -94,7 +94,7 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /** Chay 1 job: bat heartbeat, chay handler, phan biet thanh cong/that bai. */
+  /** Chạy một công việc và ghi nhận kết quả thành công hoặc thất bại. */
   private execute(job: Job): void {
     const queue = this.jobQueue as Partial<MongoJobQueue>;
     const started = Date.now();
@@ -105,9 +105,8 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
       return;
     }
 
-    // Heartbeat phai chay SONG SONG voi handler. Handler don (goi Omni API)
-    // co the treo > leaseMs; neu khong nap lai heartbeat, job bi chinh no
-    // reclaim va chay trung.
+    // Gia hạn tín hiệu phải chạy song song với hàm xử lý. Nếu không, công việc
+    // kéo dài quá leaseMs có thể bị thu hồi và chạy trùng ở worker khác.
     const timer = setInterval(() => {
       void queue.heartbeat?.(job.id, lockToken).catch(() => undefined);
     }, this.cfg.heartbeatIntervalMs);
@@ -138,13 +137,13 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
       } finally {
         this.running.get(job.id)?.stopHeartbeat();
         this.running.delete(job.id);
-        // Hang vua trong -> claim them
+        // Hàng đợi vừa có chỗ trống; thử nhận thêm việc.
         void this.pump();
       }
     })();
   }
 
-  /** Tra job cua worker da chet ve `pending`. */
+  /** Đưa công việc hết hạn giữ trở lại trạng thái chờ. */
   private async reclaim(): Promise<void> {
     const queue = this.jobQueue as Partial<MongoJobQueue>;
     if (typeof queue.reclaimExpired !== 'function') return;
@@ -155,15 +154,15 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /* ---------------------------------------------------------------- cleanup */
+  /* ------------------------------- Dọn dẹp */
 
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.reclaimTimer) clearInterval(this.reclaimTimer);
 
-    // Dung heartbeat dang chay, KHONG huy job - no se het lease va worker
-    // khac nham lai. Huy job o day se mat cong viec dang chay.
+    // Dừng gia hạn nhưng không hủy công việc. Khi hết hạn giữ, worker khác
+    // có thể nhận lại; hủy ngay sẽ làm mất công việc đang xử lý.
     for (const slot of this.running.values()) slot.stopHeartbeat();
     this.running.clear();
 

@@ -8,7 +8,7 @@ import {
   OrderPayload,
 } from '../interface/order.interface';
 
-/** Ly do khong auto-confirm */
+/** Lý do bỏ qua xác nhận tự động. */
 export enum SkipReason {
   NONE = 'none',
   NO_CUSTOMER = 'no_customer',
@@ -21,7 +21,7 @@ export enum SkipReason {
   CONFIRM_ERROR = 'confirm_error',
 }
 
-/** Trang thai noi bo cua BE, tach khoi confirmedStatus cua Harovan */
+/** Trạng thái xử lý đơn trong BE. */
 export enum OrderStatus {
   PENDING = 'pending',
   PROCESSING = 'processing',
@@ -38,9 +38,7 @@ export class CustomerSnapshot {
   @Prop() phone?: string;
   @Prop() firstName?: string;
   @Prop() lastName?: string;
-  /**
-   * Haravan snapshot; prior-order eligibility is counted from stored BE orders.
-   */
+  /** Số đơn khách tại thời điểm tạo đơn. */
   @Prop() ordersCount?: number;
   @Prop() totalSpent?: number;
   @Prop() totalPaid?: number;
@@ -61,7 +59,7 @@ export class OrderProcessing {
   @Prop({ default: false })
   isReturningCustomer!: boolean;
 
-  /** So don khach da mua TRUOC don nay */
+  /** Số đơn trước đơn hiện tại. */
   @Prop({ default: 0 })
   priorOrderCount!: number;
 
@@ -92,7 +90,7 @@ export class Order {
   @Prop() email?: string;
   @Prop() phone?: string;
 
-  /** Ten khach lay tu shipping_address.name, de log/doc nhanh */
+  /** Tên khách. */
   @Prop() customerName?: string;
 
   @Prop({ type: String, enum: FINANCIAL_STATUSES })
@@ -101,7 +99,7 @@ export class Order {
   @Prop({ type: String, enum: [...FULFILLMENT_STATUSES, null], default: null })
   fulfillmentStatus?: FulfillmentStatus;
 
-  /** Trang thai xac nhan phia Harovan: confirmed / unconfirmed */
+  /** Trạng thái xác nhận trên Haravan. */
   @Prop() confirmedStatus?: string;
 
   @Prop() cancelledStatus?: string;
@@ -156,14 +154,12 @@ export type OrderDocument = HydratedDocument<Order>;
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
-/** Idempotent: mot don chi ton tai mot lan theo (orgId, haravanOrderId) */
+/** Mỗi đơn chỉ có một bản ghi theo shop và ID Haravan. */
 OrderSchema.index({ orgId: 1, haravanOrderId: 1 }, { unique: true });
 OrderSchema.index({ createdAt: -1 });
 OrderSchema.index({ status: 1, createdAt: -1 });
 OrderSchema.index({ orgId: 1, phone: 1 });
 OrderSchema.index({ orgId: 1, 'customer.haravanId': 1 });
-
-/* ------------------------------------------------------------ order action */
 
 export enum ActionType {
   EVALUATE = 'evaluate',
@@ -180,7 +176,7 @@ export enum ActionResult {
   SKIPPED = 'skipped',
 }
 
-/** Chi tiet request/response khi goi Omni API (khong luu access token) */
+/** Thông tin lần gọi API, không lưu access token. */
 @Schema({ _id: false })
 export class ApiCall {
   @Prop() method?: string;

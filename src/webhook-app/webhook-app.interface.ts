@@ -1,11 +1,11 @@
-/** Response chung cua webhook.haravan.com/api/subscribe */
+/** Cấu trúc phản hồi chung của webhook.haravan.com/api/subscribe. */
 export interface WebhookSubscribeResponse {
   error: boolean;
   message: string;
   error_Code?: string | null;
 }
 
-/** GET /api/subscribe - danh sach topic dang duoc subscribe */
+/** Danh sách chủ đề webhook đã đăng ký từ GET /api/subscribe. */
 export interface SubscribedWebhook {
   id: string;
   event: string;

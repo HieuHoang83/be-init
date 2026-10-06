@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-/** Loai webhook: private = chu danh tay trong trang quan tri, app = app da cai dat */
+/** Loại webhook: private được cấu hình trong trang quản trị; app được đăng ký từ ứng dụng. */
 export enum AppWebhookStatus {
   ACTIVE = 'active',
   UNINSTALLED = 'uninstalled',
@@ -23,13 +23,13 @@ export class AppInstallation {
   ownerEmail?: string;
 
   /**
-   * Client secret cua app (khac webhook authentication secret cua
-   * webhook rieng tu). Dung de verify HMAC khi app goi webhook.
+   * Client secret của ứng dụng, khác với secret webhook riêng tư.
+   * Dùng để xác thực HMAC khi ứng dụng gửi webhook.
    */
   @Prop({ required: true })
   clientSecret!: string;
 
-  /** verify_token app tra ve o buoc subscribe, dung de xac nhan challenge */
+  /** Token ứng dụng gửi khi đăng ký, dùng để xác thực challenge. */
   @Prop({ required: true })
   verifyToken!: string;
 
@@ -51,7 +51,7 @@ export const AppInstallationSchema = SchemaFactory.createForClass(AppInstallatio
 
 AppInstallationSchema.index({ orgId: 1 }, { unique: true });
 
-/** Thong tin shop + thong tin xac thuc Omni API cua shop */
+/** Thông tin shop và dữ liệu xác thực Omni API của shop. */
 @Schema({ collection: 'shops', timestamps: true })
 export class Shop {
   @Prop({ required: true })
@@ -73,8 +73,8 @@ export class Shop {
   apiSecret?: string;
 
   /**
-   * Access token lay tu OAuth callback (Step 3). Uu tien dung token nay,
-   * fallback HARAVAN_ACCESS_TOKEN trong env khi rong.
+   * Access token nhận từ callback OAuth ở bước 3. Ưu tiên token này;
+   * nếu chưa có thì dùng HARAVAN_ACCESS_TOKEN trong biến môi trường.
    */
   @Prop({ select: false })
   accessToken?: string;

@@ -4,11 +4,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { mongoConfig } from './mongo.config';
 
 /**
- * Lop ket noi MongoDB.
- * Chay song song voi PrismaModule cua module user/auth.
+ * Kết nối MongoDB, chạy song song với PrismaModule của user/auth.
  *
- * Config duoc tu nap bang `ConfigModule.forFeature`, nen MongoModule
- * khong phu thuoc vao thu tu load config cua AppModule.
+ * Tự nạp cấu hình bằng `ConfigModule.forFeature`, không phụ thuộc vào thứ tự
+ * nạp cấu hình của AppModule.
  */
 @Module({
   imports: [

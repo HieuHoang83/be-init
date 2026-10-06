@@ -5,9 +5,9 @@ import {
 } from '@nestjs/common';
 import aqp from 'api-query-params';
 
-// truyền thêm metadata vào lời gọi hàm
+// Gắn thêm metadata vào hàm.
 export const IS_PUBLIC_KEY = 'isPublic';
-export const Public = () => SetMetadata(IS_PUBLIC_KEY, true); // key:value
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true); // Đánh dấu tuyến công khai.
 
 export const RESPONSE_MESSAGE = 'response_message';
 export const ResponseMessage = (message: string) =>

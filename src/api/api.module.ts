@@ -7,10 +7,10 @@ import { AccessTokenStore } from './access-token.store';
 import { ApiClient } from './api.service';
 
 /**
- * Lop goi Omni API (lay don, xac nhan don). Dung fetch co san cua Node.
+ * Cung cấp client gọi Omni API để lấy và xác nhận đơn hàng.
  *
- * Dang ky `shops` o day vi AccessTokenStore doc access token da luu tu
- * OAuth callback (webhooks/callback).
+ * Đăng ký collection `shops` để AccessTokenStore đọc access token do callback
+ * OAuth lưu lại.
  */
 @Module({
   imports: [

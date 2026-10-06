@@ -10,12 +10,8 @@ import {
 } from './webhook-app.entity';
 
 /**
- * Luu thong tin app da cai dat: client secret + verify token cho luong
- * subscribe va verify HMAC cua WEBHOOK KET NOI APP.
- *
- * KHAC biet hoan toan voi webhook rieng tu (`webhook-private`):
- * - secret lay tu bang goc `app_installations` theo tung app da cai dat
- * - webhook rieng tu lay secret copy trong trang Thong bao cua shop
+ * Lưu thông tin ứng dụng đã cài đặt, gồm client secret và verify token để
+ * đăng ký webhook và xác thực HMAC.
  */
 @Injectable()
 export class WebhookAppService {
@@ -39,7 +35,7 @@ export class WebhookAppService {
     return this.model.findOne({ orgId }).exec();
   }
 
-  /** Client secret de verify HMAC cho app da cai dat. */
+  /** Lấy client secret dùng để xác thực HMAC cho ứng dụng đã cài đặt. */
   async resolveClientSecret(orgId: number): Promise<string | null> {
     const install = await this.findByOrg(orgId);
     if (install?.clientSecret) return install.clientSecret;
@@ -50,7 +46,7 @@ export class WebhookAppService {
     return this.envClientSecret || null;
   }
 
-  /** App gui subscribe: tao ban ghi pending cho org */
+  /** Tạo bản ghi đang chờ khi ứng dụng đăng ký webhook. */
   async beginSubscription(params: {
     orgId: number;
     verifyToken: string;
@@ -76,7 +72,7 @@ export class WebhookAppService {
     return doc;
   }
 
-  /** Challenge khop -> chuyen sang active */
+  /** Chuyển trạng thái sang hoạt động sau khi challenge hợp lệ. */
   async confirmSubscription(
     orgId: number,
   ): Promise<AppInstallationDocument | null> {
@@ -92,7 +88,7 @@ export class WebhookAppService {
     return doc;
   }
 
-  /** Luu danh sach scope shop cap quyen, dung de audit va kiem tra `wh_api` */
+  /** Lưu các quyền shop đã cấp để kiểm tra và đối chiếu. */
   async upsertScopes(orgId: number, scopes: string[]): Promise<void> {
     await this.model
       .updateOne({ orgId }, { $set: { scopes }, $setOnInsert: { orgId } }, { upsert: true })
@@ -108,7 +104,7 @@ export class WebhookAppService {
       .exec();
   }
 
-  /** Buoc 4 thanh cong -> danh dau app da subscribe */
+  /** Đánh dấu ứng dụng đã đăng ký webhook thành công. */
   async markSubscribed(orgId: number): Promise<void> {
     await this.model
       .updateOne(
@@ -120,8 +116,8 @@ export class WebhookAppService {
   }
 
   /**
-   * Verify token mong doi o buoc subscribe.
-   * Uu tien token da luu theo org, fallback token trong env.
+   * So sánh verify token khi đăng ký webhook.
+   * Ưu tiên token đã lưu theo shop, sau đó dùng token trong biến môi trường.
    */
   async verifySubscriptionToken(
     orgId: number | null,

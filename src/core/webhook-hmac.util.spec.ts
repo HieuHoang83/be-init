@@ -9,7 +9,7 @@ import {
 describe('computeHmac', () => {
   it('HMAC-SHA256 base64 tren raw body', () => {
     const body = Buffer.from(JSON.stringify({ topic: 'orders/create' }));
-    // openssl dgds -binary -sha256 -hmac "secret" | base64
+    // Lệnh OpenSSL tương đương: openssl dgds -binary -sha256 -hmac "secret" | base64.
     expect(computeHmac(body, 'secret')).toMatch(/^[A-Za-z0-9+/]+={0,2}$/);
   });
 

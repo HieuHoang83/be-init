@@ -1,11 +1,11 @@
 /**
- * Abstraction cua hang doi cong viec.
+ * Lớp trừu tượng cho hàng đợi công việc.
  *
- * `JobQueue` la abstract class nen chinh no la DI token: doi backend hang doi
- * khong can doi controller hay worker, chi doi `useClass` trong `QueueModule`.
+ * `JobQueue` cũng là mã định danh để tiêm phụ thuộc. Có thể đổi cách lưu hàng
+ * đợi mà không cần sửa controller hoặc worker, chỉ cần đổi `useClass`.
  *
- * Trien khai hien tai: `MongoJobQueue` - luu job trong MongoDB, dung duoc khi
- * chay nhieu instance vi Mongo chua atomic claim.
+ * Hiện tại dùng `MongoJobQueue`, lưu trong MongoDB và hỗ trợ nhiều tiến trình
+ * nhờ thao tác nhận việc nguyên tử.
  */
 
 export interface Job<T = unknown> {
@@ -13,7 +13,7 @@ export interface Job<T = unknown> {
   name: string;
   payload: T;
   lockToken: string | null;
-  /** Lan thu hien tai, tinh tu 1 */
+  /** Lần thử hiện tại, bắt đầu từ 1. */
   attempt: number;
   maxAttempts: number;
   enqueuedAt: Date;
@@ -39,37 +39,37 @@ export interface QueueStats {
 }
 
 export abstract class JobQueue {
-  /** Dua job vao hang, tra ve job da ghi vao DB. */
+  /** Thêm công việc vào hàng đợi và trả về bản ghi đã lưu. */
   abstract enqueue<T>(name: string, payload: T): Promise<Job<T>>;
 
-  /** Worker dinh ky handler theo `name` (= `type` cua job). */
+  /** Đăng ký hàm xử lý theo tên công việc. */
   abstract registerHandler<T>(name: string, handler: JobHandler<T>): void;
 
   /**
-   * Chay handler da dang ky cho job.
+   * Chạy hàm xử lý đã đăng ký cho công việc.
    *
-   * Worker khong duoc tu giu registry - no chi goi `dispatch` de mot noi
-   * duy nhat tim handler theo `job.name` va chay.
+   * Worker gọi `dispatch`; phương thức này tìm và chạy hàm xử lý theo
+   * `job.name`.
    */
   abstract dispatch(job: Job): Promise<void>;
 
-  /** Nhat job cho worker chay. Tra `null` khi hang rong. */
+  /** Nhận một công việc để xử lý; trả về `null` nếu hàng đợi đang trống. */
   abstract claim(): Promise<Job | null>;
 
-  /** Nap lai nhip tim de worker giu duoc job. */
+  /** Gia hạn tín hiệu hoạt động để worker tiếp tục giữ công việc. */
   abstract heartbeat(jobId: string, lockToken: string): Promise<void>;
 
-  /** Danh dau job xong. */
+  /** Đánh dấu công việc đã hoàn tất. */
   abstract complete(
     jobId: string,
     lockToken: string,
     resultKey?: string,
   ): Promise<void>;
 
-  /** Danh dau job that bai; queue lo phan retry/backoff. */
+  /** Đánh dấu công việc thất bại; hàng đợi xử lý việc thử lại. */
   abstract fail(jobId: string, lockToken: string, error: string): Promise<void>;
 
-  /** Mongo driver tra Promise, driver khac co the tra gia tri ngay. */
+  /** Lấy thống kê hàng đợi; có thể trả về trực tiếp hoặc qua Promise. */
   abstract getStats(): QueueStats | Promise<QueueStats>;
 
   abstract onModuleDestroy(): Promise<void>;

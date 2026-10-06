@@ -1,12 +1,12 @@
 /**
- * Thu HMAC da Haravan gui + raw body tu logs/webhook.log,
- * roi thu lan cac secret xem cai nao khop.
+ * Đọc HMAC Haravan gửi và raw body trong logs/webhook.log, sau đó thử từng
+ * secret để tìm giá trị khớp.
  *
- * Dung:
- *   node scripts/check-webhook-secret.mjs                 # thu secret trong .env
- *   node scripts/check-webhook-secret.mjs abc def ghi     # thu them secret ban nhap
+ * Cách dùng:
+ *   node scripts/check-webhook-secret.mjs                 # thử secret trong .env
+ *   node scripts/check-webhook-secret.mjs abc def ghi     # thử thêm secret nhập vào
  *
- * KHONG sua file, KHONG goi Haravan API - chi so sanh cuc bo.
+ * Không sửa tệp hoặc gọi Haravan API; chỉ so sánh cục bộ.
  */
 import { readFileSync } from 'node:fs';
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -25,7 +25,7 @@ function readEnv() {
   return env;
 }
 
-/** Lay cac request gan nhat bi 401, kem raw + chu ky */
+/** Lấy các yêu cầu gần nhất có mã 401, kèm nội dung gốc và chữ ký. */
 function loadCaptured() {
   let lines;
   try {
@@ -90,7 +90,7 @@ if (captured.length === 0) {
   process.exit(1);
 }
 
-// Chi lay 2 request gan nhat cua tung loai endpoint de so sanh
+// Chỉ lấy yêu cầu gần nhất của mỗi loại endpoint để so sánh.
 const latest = new Map();
 for (const c of captured) latest.set(c.endpointKind, c);
 const targets = [...latest.values()];

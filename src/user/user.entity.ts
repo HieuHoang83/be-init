@@ -15,7 +15,7 @@ export class User {
   @Prop({ required: true, trim: true })
   name!: string;
 
-  /** So dien thoai la dinh danh, khong trung */
+  /** Số điện thoại dùng làm định danh và không được trùng. */
   @Prop({ required: true, unique: true })
   phone!: string;
 
@@ -35,6 +35,6 @@ export type UserDocument = HydratedDocument<User>;
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// So dien thoai la dinh danh -> unique index
+// Số điện thoại là định danh nên cần chỉ mục duy nhất.
 UserSchema.index({ phone: 1 }, { unique: true });
 UserSchema.index({ refreshToken: 1 }, { sparse: true });

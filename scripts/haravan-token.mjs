@@ -1,10 +1,10 @@
 /**
- * Doi authorization code lay access_token, roi tu ghi vao .env.
+ * Đổi authorization code lấy access_token rồi ghi token vào .env.
  *
  *   node scripts/haravan-token.mjs <authorization-code>
  *
- * Code chi dung MOT LAN va nganh -> neu bao invalid_grant, lay code moi
- * va chay lai ngay.
+ * Mã chỉ dùng được một lần và hết hạn nhanh. Nếu gặp invalid_grant, hãy lấy
+ * mã mới rồi chạy lại ngay.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 

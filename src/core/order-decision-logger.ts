@@ -2,8 +2,8 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Log dang TEXT de doc nhanh: ten don, thu tu don, khach va ket qua xu ly.
- * JSON chi tiet van nam o logs/webhook.log.
+ * Ghi log dạng văn bản để dễ xem tên đơn, thứ tự đơn, khách và kết quả xử lý.
+ * Dữ liệu JSON chi tiết nằm trong logs/webhook.log.
  */
 const LOG_DIR = join(process.cwd(), 'logs');
 const ORDER_LOG = join(LOG_DIR, 'order-decision.log');
@@ -19,8 +19,8 @@ function pad(value: unknown, width: number): string {
 }
 
 /**
- * @param r.khachCu null = chua xac dinh, false = khach moi, true = khach cu
- * @param r.soDonTruoc so don truoc don nay, null neu khong xac dinh duoc
+ * @param r.khachCu null = chưa xác định, false = khách mới, true = khách cũ.
+ * @param r.soDonTruoc Số đơn trước đơn hiện tại; null nếu chưa xác định.
  */
 export interface OrderDecisionLog {
   endpoint: string;

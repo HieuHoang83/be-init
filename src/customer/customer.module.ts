@@ -5,7 +5,7 @@ import { Order, OrderSchema } from '../order/order.entity';
 import { CustomerController } from './customer.controller';
 import { CustomerService } from './customer.service';
 
-/** Doc so lieu khach: thong ke, danh sach, chi tiet + don cua khach. */
+/** Cung cấp thống kê, danh sách, thông tin và đơn hàng của khách. */
 @Module({
   imports: [
     MongooseModule.forFeature([

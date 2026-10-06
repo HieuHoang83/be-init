@@ -61,6 +61,7 @@
   "has_order_date": false,
   "has_paid_date": false,
   "has_fulfillment_date": false,
+
   "billing_address": {
     "id": 1176262590,
     "first_name": "1",
@@ -82,7 +83,9 @@
     "zip": null,
     "default": true
   },
+
   "shipping_address": null,
+
   "customer": {
     "id": 1176262590,
     "first_name": "1",
@@ -104,6 +107,7 @@
     "last_order_name": "#10005",
     "last_order_date": "2026-10-05T08:24:00.841Z",
     "multipass_identifier": null,
+
     "default_address": {
       "id": 10285115801,
       "first_name": "1",
@@ -125,6 +129,7 @@
       "zip": null,
       "default": true
     },
+
     "addresses": [
       {
         "id": 10285115801,
@@ -149,6 +154,7 @@
       }
     ]
   },
+
   "client_details": {
     "accept_language": null,
     "browser_height": null,
@@ -157,7 +163,109 @@
     "session_hash": "f0ba72b86d014de88286dd275429d433",
     "user_agent": null
   },
-  "line_items": [],
+
+  "line_items": [
+    {
+      "fulfillable_quantity": 1,
+      "fulfillment_service": null,
+      "fulfillment_status": "notfulfilled",
+      "grams": 0,
+      "id": 2180541201,
+      "price": 0,
+      "price_original": 0,
+      "price_promotion": 0,
+      "product_id": null,
+      "quantity": 1,
+      "requires_shipping": true,
+      "sku": null,
+      "title": "San Pham 02",
+      "variant_id": null,
+      "variant_title": "",
+      "vendor": null,
+      "type": null,
+      "name": "San Pham 02",
+      "gift_card": false,
+      "taxable": false,
+      "tax_lines": null,
+      "product_exists": false,
+      "barcode": null,
+      "properties": [],
+      "applied_discounts": null,
+      "total_discount": 0,
+      "image": null,
+      "not_allow_promotion": false,
+      "ma_cost_amount": 0,
+      "actual_price": 0,
+      "discount_allocations": null
+    },
+    {
+      "fulfillable_quantity": 1,
+      "fulfillment_service": null,
+      "fulfillment_status": "notfulfilled",
+      "grams": 0,
+      "id": 2180541202,
+      "price": 100000,
+      "price_original": 100000,
+      "price_promotion": 0,
+      "product_id": null,
+      "quantity": 1,
+      "requires_shipping": true,
+      "sku": null,
+      "title": "SP 01",
+      "variant_id": null,
+      "variant_title": "",
+      "vendor": null,
+      "type": null,
+      "name": "SP 01",
+      "gift_card": false,
+      "taxable": false,
+      "tax_lines": null,
+      "product_exists": false,
+      "barcode": null,
+      "properties": [],
+      "applied_discounts": null,
+      "total_discount": 0,
+      "image": null,
+      "not_allow_promotion": false,
+      "ma_cost_amount": 0,
+      "actual_price": 0,
+      "discount_allocations": null
+    },
+    {
+      "fulfillable_quantity": 1,
+      "fulfillment_service": null,
+      "fulfillment_status": "notfulfilled",
+      "grams": 0,
+      "id": 2180541200,
+      "price": 300000,
+      "price_original": 300000,
+      "price_promotion": 0,
+      "product_id": null,
+      "quantity": 1,
+      "requires_shipping": true,
+      "sku": null,
+      "title": "sản phẩm 03",
+      "variant_id": null,
+      "variant_title": "",
+      "vendor": null,
+      "type": null,
+      "name": "sản phẩm 03",
+      "gift_card": false,
+      "taxable": false,
+      "tax_lines": null,
+      "product_exists": false,
+      "barcode": null,
+      "properties": [],
+      "applied_discounts": null,
+      "total_discount": 0,
+      "image": null,
+      "not_allow_promotion": false,
+      "ma_cost_amount": 0,
+      "actual_price": 0,
+      "discount_allocations": null
+    }
+  ],
+
   "fulfillments": [],
   "refunds": [],
   "shipping_lines": [],

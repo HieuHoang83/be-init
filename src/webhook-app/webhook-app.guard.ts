@@ -5,10 +5,8 @@ import { appConfig } from '../config';
 import { WebhookAppService } from './webhook-app.service';
 
 /**
- * Verify HMAC cho WEBHOOK KET NOI APP.
- *
- * Khac webhook rieng tu: secret lay tu bang goc `app_installations`
- * (client secret cua app da cai dat), khong lay tu trang Thong bao.
+ * Xác thực HMAC cho webhook ứng dụng.
+ * Secret lấy từ `app_installations`, không lấy từ trang Thông báo của shop.
  */
 @Injectable()
 export class WebhookAppHmacGuard extends HmacGuard {
@@ -27,14 +25,13 @@ export class WebhookAppHmacGuard extends HmacGuard {
   }
 
   protected async resolveSecret(orgId: number | null): Promise<string | null> {
-    // Payload co org_id -> uu tien secret da luu cho app do
+    // Nếu payload có org_id, ưu tiên secret đã lưu cho ứng dụng đó.
     if (orgId) {
       const secret = await this.appService.resolveClientSecret(orgId);
       if (secret) return secret;
     }
 
-    // Khong co org_id (hoac chua co ban ghi) -> dung secret mac dinh,
-    // phuc vu setup 1 shop, tranh cho moi payload deu phai co org_id.
+    // Nếu chưa có secret theo shop, dùng secret mặc định để hỗ trợ cấu hình một shop.
     if (orgId) {
       const perOrg = this.orgSecrets[String(orgId)];
       if (perOrg) return perOrg;

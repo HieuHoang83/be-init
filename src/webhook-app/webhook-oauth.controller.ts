@@ -16,14 +16,14 @@ import { AccessTokenStore } from '../api/access-token.store';
 import { WebhookAppService } from './webhook-app.service';
 
 /**
- * OAuth callback cua Haravan App (Step 2 -> Step 3).
+ * Callback OAuth của ứng dụng Haravan, từ bước 2 sang bước 3.
  *
- * Sau khi nguoi ban cham "Confirm install", Haravan redirect ve:
+ * Sau khi người bán chọn "Confirm install", Haravan chuyển hướng về:
  *   GET {redirect_uri}?code=XXX&scope=YYY&session_state=ZZZ
  *
- * Route nay nhan `code`, doi sang access token (POST /connect/token) va luu lai
- * de cac API sau dung duoc. KHONG ton tai route nay thi Haravan nhan 404,
- * code bi bo roi va khong lay duoc token.
+ * Tuyến này nhận `code`, đổi thành access token qua POST /connect/token và
+ * lưu lại để các API sử dụng. Nếu thiếu tuyến này, Haravan sẽ nhận lỗi 404
+ * và mã ủy quyền không thể đổi lấy token.
  */
 @Controller('webhooks/callback')
 export class WebhookOauthController {
@@ -63,7 +63,7 @@ export class WebhookOauthController {
       redirectUri: this.cfg.redirectUri,
     };
 
-    // Shop tu cho lai truoc khi cap quyen
+    // Nếu shop từ chối cấp quyền, trả về lỗi tương ứng.
     if (error) {
       this.logger.warn(`Shop tu cho lai: ${error} - ${errorDescription ?? ''}`);
       return this.reply(res, 400, {
@@ -100,7 +100,7 @@ export class WebhookOauthController {
 
       const grantedScopes = (token.scope ?? scope ?? '').split(/\s+/).filter(Boolean);
 
-      // Luu xuong DB de dung duoc qua cac lan restart
+      // Lưu vào cơ sở dữ liệu để tiếp tục sử dụng sau khi khởi động lại.
       const orgId = Number(process.env.HARAVAN_ORG_ID) || 0;
       let savedTo = 'khong luu (thieu HARAVAN_ORG_ID)';
       if (orgId) {
@@ -121,7 +121,7 @@ export class WebhookOauthController {
 
       const hasWhApi = grantedScopes.includes('wh_api');
 
-      // KHONG tra access_token ve trinh duyet
+      // Không trả access_token về trình duyệt.
       return this.reply(res, 200, {
         ok: true,
         saved_to: savedTo,

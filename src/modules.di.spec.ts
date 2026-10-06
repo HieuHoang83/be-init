@@ -10,10 +10,6 @@ import { QueueModule } from './queue/queue.module';
 import { WebhookPrivateModule } from './webhook-private/webhook-private.module';
 import { WebhookAppModule } from './webhook-app/webhook-app.module';
 
-/**
- * Smoke test: 4 module don lap phai resolve DI duoc va MongoDB ket noi duoc.
- * Khong dung route thuong cua AppModule de tranh phu thuoc module user/auth.
- */
 describe('Haravan modules (DI graph)', () => {
   it('resolve DI + ket noi MongoDB', async () => {
     const ref = await Test.createTestingModule({
@@ -21,7 +17,7 @@ describe('Haravan modules (DI graph)', () => {
         ConfigModule.forRoot({
           isGlobal: true,
           load: [appConfig, mongoConfig],
-          envFilePath: ['.env.local', '.env', 'atlas-credentials.env'],
+          envFilePath: '.env',
         }),
         MongoModule,
         QueueModule,
@@ -45,11 +41,9 @@ describe('Haravan modules (DI graph)', () => {
       );
     console.log('\nROUTES:\n' + routes.join('\n'));
 
-    // Webhook rieng tu: chi POST (khong co GET challenge)
     expect(routes).toContain('POST /webhooks/haravan');
     expect(routes).not.toContain('GET /webhooks/haravan');
 
-    // Webhook ket noi app: co GET subscribe challenge + POST nhan thong bao
     expect(routes).toContain('GET /webhooks/app');
     expect(routes).toContain('POST /webhooks/app');
 

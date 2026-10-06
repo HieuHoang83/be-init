@@ -1,12 +1,12 @@
 /**
- * Doc logs/webhook.log va tach theo loai luong de doc nhanh:
- *   - verify_token      : GET co hub.* -> buoc xac thuc app, dung HARAVAN_APP_VERIFY_TOKEN
- *   - event_notification: POST co HMAC -> event that tu don moi
- *   - hmac_rejected     : POST bi 401
- *   - oauth_callback    : GET /webhooks/callback?code=...
+ * Đọc logs/webhook.log và nhóm theo loại luồng:
+ *   - verify_token: GET có hub.* để xác thực ứng dụng.
+ *   - event_notification: POST có HMAC, là thông báo đơn hàng.
+ *   - hmac_rejected: POST bị từ chối với mã 401.
+ *   - oauth_callback: GET /webhooks/callback?code=...
  *
- *   node scripts/show-webhooks.mjs            # 30 dong gan nhat
- *   node scripts/show-webhooks.mjs 100        # 100 dong
+ *   node scripts/show-webhooks.mjs            # 30 dòng gần nhất
+ *   node scripts/show-webhooks.mjs 100        # 100 dòng
  *   node scripts/show-webhooks.mjs verify_token
  */
 import { readFileSync } from 'node:fs';
@@ -17,7 +17,7 @@ let lines;
 try {
   lines = readFileSync(LOG, 'utf8').trim().split('\n');
 } catch {
-  console.error(`Khong doc duoc ${LOG}`);
+  console.error(`Không đọc được ${LOG}`);
   process.exit(1);
 }
 

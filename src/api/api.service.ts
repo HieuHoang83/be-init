@@ -35,7 +35,7 @@ interface ErrorBody {
   message?: string;
 }
 
-/** Loi tu Harovan, giu nguyen status de service layer quyet dinh retry hay khong */
+/** Lỗi từ Haravan; giữ nguyên mã trạng thái để tầng dịch vụ quyết định có thử lại hay không. */
 export class ApiError extends Error {
   constructor(
     readonly statusCode: number,
@@ -46,7 +46,7 @@ export class ApiError extends Error {
     this.name = 'ApiError';
   }
 
-  /** 429 / 5xx / loi mang -> nen retry */
+  /** Nên thử lại khi gặp mã 429, lỗi máy chủ 5xx hoặc lỗi mạng. */
   get retryable(): boolean {
     if (this.statusCode === 429) return true;
     return this.statusCode >= 500 && this.statusCode < 600;
@@ -54,10 +54,10 @@ export class ApiError extends Error {
 }
 
 /**
- * Client goi Haravan Omni API bang `fetch` co san cua Node 18+.
- * - Tu lay access token theo shop
- * - Retry co backoff khi gap 429 / 5xx / loi mang
- * - Nem ApiError de OrderService phan loai
+ * Gọi Haravan Omni API bằng `fetch` có sẵn trong Node.js 18 trở lên.
+ * - Tự lấy access token theo shop.
+ * - Thử lại với thời gian chờ tăng dần khi gặp lỗi 429, 5xx hoặc lỗi mạng.
+ * - Ném ApiError để OrderService phân loại lỗi.
  */
 @Injectable()
 export class ApiClient {
@@ -84,8 +84,8 @@ export class ApiClient {
   }
 
   /**
-   * Xac nhan don: POST /com/orders/{order_id}/confirm.json
-   * Body: { confirmed_status: 'confirmed' }
+   * Xác nhận đơn hàng qua POST /com/orders/{order_id}/confirm.json.
+   * Nội dung gửi đi: { confirmed_status: 'confirmed' }.
    */
   confirmOrder(orgId: number, orderId: number): Promise<ApiResponse<unknown>> {
     return this.request<unknown>(orgId, 'POST', `/orders/${orderId}/confirm.json`, {
@@ -94,21 +94,20 @@ export class ApiClient {
   }
 
   /**
-   * Buoc 4 - POST https://webhook.haravan.com/api/subscribe
-   * Khai bao app duoc nhan thong bao webhook. Can scope `wh_api`.
-   * KHAC Omni API: host khac va dung `Authorization: Bearer` (khong phai
-   * header haravan-access-token).
+   * Bước 4: đăng ký để ứng dụng nhận webhook. Cần quyền `wh_api`.
+   * API này dùng máy chủ riêng và xác thực bằng `Authorization: Bearer`,
+   * không dùng header `haravan-access-token` như Omni API.
    */
   subscribeWebhook(orgId: number): Promise<ApiResponse<WebhookSubscribeResponse>> {
     return this.requestWebhookApi<WebhookSubscribeResponse>(orgId, 'POST');
   }
 
-  /** Buoc 7 - DELETE https://webhook.haravan.com/api/subscribe */
+  /** Bước 7: hủy đăng ký webhook. */
   unsubscribeWebhook(orgId: number): Promise<ApiResponse<WebhookSubscribeResponse>> {
     return this.requestWebhookApi<WebhookSubscribeResponse>(orgId, 'DELETE');
   }
 
-  /** Buoc 8 - GET https://webhook.haravan.com/api/subscribe */
+  /** Bước 8: lấy danh sách webhook đã đăng ký. */
   listSubscribedWebhooks(
     orgId: number,
   ): Promise<ApiResponse<SubscribedWebhookListResponse>> {
@@ -116,11 +115,11 @@ export class ApiClient {
   }
 
   /**
-   * Buoc 3 - doi authorization code lay access token.
-   * POST https://accounts.haravan.com/connect/token
+   * Bước 3: đổi mã ủy quyền lấy access token qua
+   * POST https://accounts.haravan.com/connect/token.
    *
-   * KHONG dung AccessTokenStore: buoc nay chua co org_id va chua co token,
-   * truyền client_id + client_secret + code + redirect_uri trực tiếp.
+   * Không dùng AccessTokenStore vì bước này chưa có org_id hay token.
+   * Gửi trực tiếp client_id, client_secret, code và redirect_uri.
    */
   async exchangeAuthorizationCode(
     code: string,
@@ -133,8 +132,7 @@ export class ApiClient {
       client_id: this.cfg.oauth.clientId,
       client_secret: this.cfg.oauth.clientSecret,
       code,
-      // Phai GION CHINH XAC redirect_uri dung o buoc authorize (Step 2),
-      // neu lech 1 ky tu -> invalid_grant
+      // redirect_uri phải giống hệt URI ở bước cấp quyền, nếu không sẽ lỗi invalid_grant.
       redirect_uri: this.cfg.oauth.redirectUri,
     });
 
@@ -286,7 +284,7 @@ export class ApiClient {
           continue;
         }
 
-        // Loi mang / timeout -> luon retry
+        // Luôn thử lại nếu xảy ra lỗi mạng hoặc hết thời gian chờ.
         const message = (error as Error).message;
         lastError = new ApiError(0, `Khong goi duoc Haravan API: ${message}`);
 
@@ -319,9 +317,8 @@ export class ApiClient {
       return await fetch(url, {
         method,
         headers: {
-          // Token tu OAuth App install chi chap nhan `Authorization: Bearer`.
-          // Token long-lived (kieu cu) lai dung `haravan-access-token`.
-          // Gui ca hai de an toan cho moi hinh cap quyen.
+          // OAuth App dùng `Authorization: Bearer`; token cũ dùng
+          // `haravan-access-token`. Gửi cả hai để hỗ trợ các kiểu cấp quyền.
           'haravan-access-token': token,
           authorization: `Bearer ${token}`,
           'content-type': 'application/json',

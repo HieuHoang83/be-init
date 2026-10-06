@@ -19,37 +19,23 @@ import { WebhookAppModule } from './webhook-app/webhook-app.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      // appConfig: webhooks + rule + queue + api
-      // mongoConfig: URI/DB cho Mongoose
       load: [appConfig, mongoConfig],
-      envFilePath: [
-        '.env.local',
-        '.env',
-        'atlas-credentials.env',
-        'dist/atlas-credentials.env',
-      ],
+      envFilePath: '.env',
     }),
-    //gioi han luot goi api/ 1 may sd
     ThrottlerModule.forRoot([
       {
-        ttl: 60000, //mili giay
-        limit: 10, //gioi han trong n giay do
+        ttl: 60000,
+        limit: 10,
       },
     ]),
     UsersModule,
     AuthModule,
-    // Data layer MongoDB
     MongoModule,
-    // Don hang: luu DB, danh gia khach quay lai, goi confirm
     OrderModule,
-    // Khach hang: thong ke so luong, danh sach, chi tiet
     CustomerModule,
-    // Webhook Haravan: verify HMAC + audit
     WebhookPrivateModule,
     WebhookAppModule,
-    // Hang doi cong viec: job luu trong MongoDB, worker chay tu phong
     QueueModule,
-    // Client goi Haravan Omni API
     ApiModule,
   ],
   controllers: [AppController],

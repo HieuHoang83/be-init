@@ -37,7 +37,7 @@ export interface CustomerPayload {
   phone?: string | null;
   first_name?: string | null;
   last_name?: string | null;
-  /** Snapshot count from Haravan, including the current order when present. */
+  /** Số đơn Haravan ghi nhận tại thời điểm nhận dữ liệu, gồm đơn hiện tại nếu có. */
   orders_count?: number | null;
   total_spent?: number | null;
   total_paid?: number | null;
@@ -137,12 +137,12 @@ export interface OrderPayload {
   [key: string]: unknown;
 }
 
-/** Envelope webhook: { org_id, topic, data: <order> } */
+/** Cấu trúc webhook: { org_id, topic, data: <order> }. */
 export interface WebhookEnvelope {
   org_id?: number | string | null;
   topic?: string | null;
   created_at?: string | null;
-  /** Với orders/create thì data là order object (hoặc { order }) */
+  /** Với orders/create, data là đơn hàng trực tiếp hoặc object { order }. */
   data?: OrderPayload | { order?: OrderPayload } | null;
   [key: string]: unknown;
 }

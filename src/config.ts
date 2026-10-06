@@ -1,7 +1,7 @@
 import { registerAs } from '@nestjs/config';
 
 export interface RuleConfig {
-  /** Số đơn khách đã mua TRƯỚC đơn này tối thiểu để auto confirm. */
+  /** Số đơn tối thiểu khách đã mua trước đơn hiện tại để tự động xác nhận. */
   minPriorOrders: number;
   /** Tổng chi tiêu tối thiểu trước đơn này (VND). 0 = bỏ qua. */
   minPriorSpent: number;
@@ -9,19 +9,19 @@ export interface RuleConfig {
 
 export interface ApiConfig {
   baseUrl: string;
-  /** API subscribe webhook: webhook.haravan.com (khac host Omni API) */
+  /** Địa chỉ API đăng ký webhook; máy chủ này khác Omni API. */
   webhookBaseUrl: string;
   timeoutMs: number;
   maxRetries: number;
   retryBaseDelayMs: number;
-  /** OAuth: doi authorization code lay access token (buoc 3 cua Haravan App) */
+  /** Cấu hình OAuth để đổi mã ủy quyền lấy access token ở bước 3. */
   oauth: OAuthConfig;
 }
 
 export interface OAuthConfig {
   clientId: string;
   clientSecret: string;
-  /** Phai GION CHINH XAC redirect_uri dung o buoc authorize */
+  /** Phải giống hệt redirect_uri đã dùng ở bước cấp quyền. */
   redirectUri: string;
 }
 
@@ -30,30 +30,29 @@ export interface QueueConfig {
   maxAttempts: number;
   backoffBaseMs: number;
   backoffMaxMs: number;
-  /** Bao lau poll co job moi */
+  /** Thời gian chờ giữa các lần tìm công việc mới. */
   pollIntervalMs: number;
-  /** Bao lau worker nap lai heartbeat (nhip tim) */
+  /** Khoảng thời gian worker gia hạn tín hiệu còn hoạt động. */
   heartbeatIntervalMs: number;
-  /** Worker giu job toi da lau thi job xem nhu worker da chet */
+  /** Thời gian giữ công việc tối đa trước khi xem worker là đã dừng. */
   leaseMs: number;
-  /** Bao lau quet cac job running qua han heartbeat */
+  /** Khoảng thời gian quét công việc quá hạn tín hiệu hoạt động. */
   reclaimIntervalMs: number;
-  /** Bat worker hay khong (cho phep tat trong test) */
+  /** Bật hoặc tắt worker, chủ yếu dùng trong kiểm thử. */
   enabled: boolean;
 }
 
 export interface WebhookConfig {
   /**
-   * WEBHOOK RIENG TU: `webhook authentication secret` copy trong
-   * trang Cau hinh -> Thong bao -> Webhooks cua shop.
+   * Webhook riêng tư: secret lấy tại Cấu hình -> Thông báo -> Webhooks của shop.
    */
   privateSecret: string;
-  /** Map orgId -> secret, khi nhieu shop dung chung mot app. */
+  /** Ánh xạ mã shop sang secret khi nhiều shop dùng chung một ứng dụng. */
   privateOrgSecrets: Record<string, string>;
 
   /**
-   * WEBHOOK KET NOI APP: app duoc cai dat vao shop, co buoc subscribe
-   * (hub.verify_token / hub.challenge).
+   * Webhook ứng dụng: ứng dụng được cài vào shop và đăng ký qua
+   * hub.verify_token / hub.challenge.
    */
   appVerifyToken: string;
   appClientSecret: string;
@@ -129,18 +128,18 @@ export const appConfig = registerAs(
       maxAttempts: Number(process.env.HARAVAN_QUEUE_MAX_ATTEMPTS || 3),
       backoffBaseMs: Number(process.env.HARAVAN_QUEUE_BACKOFF_BASE_MS || 1000),
       backoffMaxMs: Number(process.env.HARAVAN_QUEUE_BACKOFF_MAX_MS || 30000),
-      /** Bao lau poll co job moi */
+      /** Thời gian chờ giữa các lần tìm công việc mới. */
       pollIntervalMs: Number(process.env.JOB_QUEUE_POLL_INTERVAL_MS || 1000),
-      /** Bao lau worker nap lai heartbeat (nhip tim) */
+      /** Khoảng thời gian worker gia hạn tín hiệu còn hoạt động. */
       heartbeatIntervalMs: Number(
         process.env.JOB_QUEUE_HEARTBEAT_INTERVAL_MS || 4000,
       ),
-      /** Worker giu job toi da lau thi job xem nhu worker da chet */
+      /** Thời gian giữ công việc tối đa trước khi xem worker là đã dừng. */
       leaseMs: Number(process.env.JOB_QUEUE_LEASE_MS || 90000),
       reclaimIntervalMs: Number(
         process.env.JOB_QUEUE_RECLAIM_INTERVAL_MS || 300000,
       ),
-      /** Bat worker hay khong (cho phep tat trong test) */
+      /** Bật hoặc tắt worker, chủ yếu dùng trong kiểm thử. */
       enabled: process.env.JOB_QUEUE_ENABLED !== 'false',
     },
   }),

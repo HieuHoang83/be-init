@@ -12,14 +12,14 @@ import { UsersModule } from 'src/user/user.module';
 @Module({
   imports: [
     PassportModule,
-    // User/Role nam trong MongoDB, lay qua UsersModule
+    // Thông tin người dùng và vai trò được lưu trong MongoDB, truy cập qua UsersModule.
     UsersModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_ACCESS_TOKEN_SECRET'),
         signOptions: {
-          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRE'),
+          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRE', '15m'),
         },
       }),
       inject: [ConfigService],

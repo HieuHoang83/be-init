@@ -1,24 +1,17 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-/**
- * Khach hang cua 1 shop, gom lai tu moi don de biet day la khach cu hay moi.
- *
- * Ly do can bang rieng (khong chi doc `orders`):
- *  - `orders/create` co the THIEU ten/sdt, chi `orders/updated` moi co du
- *  - nhieu don cung 1 khach -> dem nhanh, khong can query
- *  - khoa tim bang sdt, vi `email` thuong null o don COD
- */
+/** Thông tin khách được tổng hợp theo từng shop. */
 @Schema({ collection: 'customers', timestamps: true })
 export class Customer {
   @Prop({ required: true, index: true })
   orgId!: number;
 
-  /** Id khach o Harovan. Co gia tri o payload moi. */
+  /** ID khách trên Haravan. */
   @Prop({ index: true })
   haravanCustomerId?: number;
 
-  /** Sdt chuan hoa (bỏ khoang trắng, dấu +, số 0 dau) - khoa so sanh chinh */
+  /** Số điện thoại đã chuẩn hóa. */
   @Prop({ index: true })
   phone?: string;
 
@@ -30,7 +23,7 @@ export class Customer {
   @Prop()
   lastName?: string;
 
-  /** Ten day du, uu tien shipping_address.name */
+  /** Tên đầy đủ của khách. */
   @Prop() fullName?: string;
 
   @Prop()
@@ -38,7 +31,7 @@ export class Customer {
   @Prop({ default: false })
   verifiedEmail?: boolean;
 
-  /** So don Haravan da gom TAT CA (da ke don hien tai) */
+  /** Tổng số đơn theo Haravan. */
   @Prop({ default: 0 })
   haravanOrdersCount?: number;
 
@@ -48,21 +41,21 @@ export class Customer {
   @Prop() lastOrderId?: number;
   @Prop() lastOrderName?: string;
 
-  /** So don BE da luu cho khach nay */
+  /** Số đơn đã lưu trong BE. */
   @Prop({ default: 0 })
   beOrderCount?: number;
 
   @Prop({ default: 0 })
   beTotalSpent?: number;
 
-  /** Danh sach don cua khach, dung de doi chieu khi can */
+  /** ID các đơn của khách. */
   @Prop({ type: [Number], default: [] })
   orderIds?: number[];
 
   @Prop() firstSeenAt?: Date;
   @Prop() lastSeenAt?: Date;
 
-  /** Don nao moi nhat dua thong tin khach vao - giup truy nguon */
+  /** Nguồn cập nhật thông tin khách gần nhất. */
   @Prop() infoSourceOrderId?: number;
   @Prop() infoSourceTopic?: string;
 }
@@ -70,10 +63,7 @@ export class Customer {
 export type CustomerDocument = HydratedDocument<Customer>;
 export const CustomerSchema = SchemaFactory.createForClass(Customer);
 
-/**
- * Khoa duy nhat: uu tien id Haravan, khong co thi dung sdt.
- * Regex de `email` null khong tao nhieu ban ghi trung.
- */
+/** Khóa duy nhất theo shop và thông tin nhận diện khách. */
 CustomerSchema.index(
   { orgId: 1, haravanCustomerId: 1 },
   { sparse: true, unique: true },

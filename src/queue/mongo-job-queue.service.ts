@@ -7,9 +7,9 @@ import { appConfig, QueueConfig } from '../config';
 import { JobQueue, Job, QueueStats } from './queue.service';
 import { Job as JobEntity, JobDocument, JobStatus } from './job.entity';
 
-/* ------------------------------------------------------------------ ULID */
+/* ---------------------------------- Tạo ULID */
 
-/** Crockford base32, khong chua I/L/O/U de goi doc khong nham */
+/** Mã hóa Crockford Base32, bỏ I, L, O và U để tránh nhầm lẫn khi đọc. */
 const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 let lastMs = 0;
 let lastRandom: number[] = [];
@@ -31,15 +31,15 @@ function encodeRandom(len: number): string {
 }
 
 /**
- * ULID 26 ky tu: 10 ky tu timestamp + 16 ky tu ngau nhien.
- * Sap xep theo thu tu thoi gian nen index `createdAt` van du dung.
- * Trong cung 1 ms thi tang `lastRandom` de id khong trung.
+ * ULID gồm 26 ký tự: 10 ký tự thời gian và 16 ký tự ngẫu nhiên.
+ * Mã sắp xếp theo thời gian; trong cùng một mili giây, phần ngẫu nhiên tăng
+ * để tránh tạo mã trùng.
  */
 export function ulid(): string {
   const now = Date.now();
 
   if (now === lastMs) {
-    // cung millisecond -> tang so ngau nhien 1 don
+    // Nếu vẫn trong cùng mili giây, tăng phần ngẫu nhiên lên một đơn vị.
     for (let i = lastRandom.length - 1; i >= 0; i--) {
       if (lastRandom[i] < 31) {
         lastRandom[i] += 1;
@@ -56,29 +56,27 @@ export function ulid(): string {
   return encodeTime(now) + encodeRandom(16);
 }
 
-/* --------------------------------------------------------------- helpers */
+/* --------------------------------- Tiện ích */
 
 export type DbJob = JobEntity & { _id: unknown };
 
 /**
- * Hang doi cong viec luu trong MongoDB.
+ * Hàng đợi công việc được lưu trong MongoDB.
  *
- * Thay the `InProcessJobQueue` ma khong can doi controller/worker: module chi
- * doi `useClass`, abstraction `JobQueue` giu nguyen.
+ * Có thể thay `InProcessJobQueue` mà không cần sửa controller hoặc worker;
+ * chỉ cần đổi `useClass`, còn `JobQueue` vẫn giữ nguyên.
  *
- * Ba co che chinh:
+ * Ba cơ chế chính:
  *
- * 1. CLAIM ATOMIC - `findOneAndUpdate` loc `{status:'pending'}` roi sap xep
- *    `createdAt` tang dan. Mongo dam bao chi mot worker nhan duoc cung mot
- *    job, nen khong can khoa phan tach khi chay nhieu instance.
+ * 1. Nhận việc nguyên tử: `findOneAndUpdate` lọc trạng thái chờ và sắp xếp
+ *    theo `createdAt`. MongoDB bảo đảm chỉ một worker nhận được mỗi công việc.
  *
- * 2. LEASE + HEARTBEAT - worker giu job bang `lockedBy`/`heartbeatAt` va
- *    nap lai moi `heartbeatIntervalMs`. Job co `heartbeatAt` cu hon
- *    `now - leaseMs` bi tra ve `pending` (worker do da chet).
+ * 2. Thời hạn giữ và tín hiệu hoạt động: worker gia hạn `heartbeatAt` theo
+ *    chu kỳ. Công việc quá hạn được trả về trạng thái chờ.
  *
- * 3. RETRY BACKOFF - that bai thi tang `attempts`; con du so lan thi quay lai
- *    `pending` kem `availableAt = now + backoff`. Het `maxAttempts` thi
- *    chuyen `failed` va giu nguyen error de doc lai.
+ * 3. Thử lại có giãn cách: khi thất bại, tăng `attempts`. Nếu còn lượt thử,
+ *    đưa công việc về trạng thái chờ và đặt `availableAt`; nếu hết lượt,
+ *    chuyển sang thất bại và giữ lại lỗi.
  */
 @Injectable()
 export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
@@ -87,10 +85,10 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
   private readonly cfg: QueueConfig;
   private readonly workerId: string;
 
-  /** handler theo `type`, dung chung voi InProcessJobQueue */
+  /** Ánh xạ loại công việc với hàm xử lý. */
   private readonly handlers = new Map<string, (job: Job) => Promise<void>>();
 
-  /** Dem cho JobStats, ton tai trong RAM nen reset khi restart - OK */
+  /** Bộ đếm thống kê trong bộ nhớ; được đặt lại khi ứng dụng khởi động lại. */
   private processed = 0;
   private failed = 0;
   private retried = 0;
@@ -104,7 +102,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     this.workerId = `${process.env.HOSTNAME ?? 'worker'}-${process.pid}`;
   }
 
-  /* ------------------------------------------------------------- enqueue */
+  /* --------------------------------- Thêm công việc */
 
   async enqueue<T>(name: string, payload: T): Promise<Job<T>> {
     if (!this.handlers.has(name)) {
@@ -128,7 +126,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
       id: doc.id,
       name,
       payload,
-      // attempt hien tai = da thu + 1
+      // Lần thử hiện tại bằng số lần đã thử cộng một.
       attempt: 1,
       maxAttempts: doc.maxAttempts,
       enqueuedAt: now,
@@ -153,14 +151,13 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     await handler(job);
   }
 
-  /* --------------------------------------------------------------- claim */
+  /* -------------------------------- Nhận công việc */
 
   /**
-   * Nhat job cho worker nay chay.
+   * Nhận một công việc để worker này xử lý.
    *
-   * `findOneAndUpdate` la atomic: Mongo gan luon mot ban ghi cho mot
-   * `findAndModify`, nen worker A va worker B goi cung luc chi mot ben
-   * nhan duoc job. Tra `null` khi hang rong.
+   * `findOneAndUpdate` là thao tác nguyên tử: nếu nhiều worker gọi cùng lúc,
+   * chỉ một worker nhận được công việc. Trả về `null` nếu hàng đợi trống.
    */
   async claim(): Promise<Job | null> {
     const now = new Date();
@@ -181,11 +178,11 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
             startedAt: now,
             lockToken,
           },
-          // Lan chay tiep theo moi tinh la 1 lan thu
+          // Chỉ tính thêm một lượt khi bắt đầu chạy công việc.
           $inc: { attempts: 1 },
         },
         {
-          // Job cu chay truoc
+          // Ưu tiên công việc được tạo trước.
           sort: { createdAt: 1 },
           new: true,
         },
@@ -205,7 +202,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     };
   }
 
-  /** Nap lai `heartbeatAt` de worker khong bi giu job khi xu ly dai. */
+  /** Gia hạn `heartbeatAt` để công việc chạy lâu không bị thu hồi. */
   async heartbeat(jobId: string, lockToken: string): Promise<void> {
     await this.jobModel
       .updateOne(
@@ -215,7 +212,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
       .exec();
   }
 
-  /** Cap nhat checkpoint tien do. */
+  /** Cập nhật số dòng đã xử lý. */
   async reportProgress(
     jobId: string,
     lockToken: string,
@@ -232,7 +229,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
       .exec();
   }
 
-  /* ---------------------------------------------------------- complete/fail */
+  /* --------------------------- Hoàn tất hoặc đánh dấu thất bại */
 
   async complete(
     jobId: string,
@@ -262,8 +259,8 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
   }
 
   /**
-   * Job that bai. Con du so lan -> `pending` + backoff; het -> `failed`.
-   * Khong xoa `lockedBy` khi retry de tiet kiem mot lan ghi.
+   * Nếu còn lượt thử, đưa công việc về `pending` và chờ theo backoff;
+   * nếu hết lượt, chuyển sang `failed`.
    */
   async fail(jobId: string, lockToken: string, error: string): Promise<void> {
     const owner = {
@@ -310,7 +307,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     }
   }
 
-  /** Exponential backoff: base * 2^(attempts-1), cap o backoffMaxMs. */
+  /** Tính thời gian chờ tăng dần, không vượt quá `backoffMaxMs`. */
   private backoffMs(attempts: number): number {
     return Math.min(
       this.cfg.backoffBaseMs * 2 ** Math.max(attempts - 1, 0),
@@ -318,14 +315,14 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     );
   }
 
-  /* -------------------------------------------------------------- orphan */
+  /* ------------------------------ Thu hồi công việc bỏ dở */
 
   /**
-   * Tra job cua worker da chet ve `pending`.
+   * Đưa công việc của worker đã dừng trở lại trạng thái chờ.
    *
-   * Worker dung nhip tim (`heartbeatAt`) nen qua `leaseMs` khong nhip la
-   * da chet. Job phai dung lai `attempts` - neu khong, job se that bai lien
-   * tuc va het luot retry chi vi worker chet, khong vi loi nghiep vu.
+   * Worker gia hạn `heartbeatAt`; nếu quá `leaseMs` không có tín hiệu mới,
+   * xem như worker đã dừng. Hoàn lại lượt thử để công việc không bị tính là
+   * thất bại chỉ vì worker dừng đột ngột.
    */
   async reclaimExpired(count = 100): Promise<number> {
     const deadline = new Date(Date.now() - this.cfg.leaseMs);
@@ -376,9 +373,9 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     return reclaimed;
   }
 
-  /* --------------------------------------------------------------- stats */
+  /* --------------------------------- Thống kê */
 
-  /** Doc truc tiep tu DB nen bao cao dung ke ca sau khi restart. */
+  /** Đọc trực tiếp từ cơ sở dữ liệu nên số liệu vẫn chính xác sau khi khởi động lại. */
   async getStats(): Promise<QueueStats> {
     const grouped = await this.jobModel.aggregate<{
       _id: JobStatus;
@@ -398,24 +395,23 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     };
   }
 
-  /* -------------------------------------------------------------- shutdown */
+  /* --------------------------------- Dừng dịch vụ */
 
   /**
-   * Khong dung gi khi shutdown.
+   * Không thay đổi trạng thái công việc khi dừng dịch vụ.
    *
-   * Job dang `running` co `lockedBy` cua worker nay, het lease se
-   * `reclaimExpired` dua ve `pending` - worker moi chay lai. Xoa o day se
-   * lam mat cong viec dang xu ly giua duong.
+   * Công việc đang chạy sẽ được `reclaimExpired` trả về trạng thái chờ khi
+   * hết thời hạn giữ để worker khác xử lý. Xóa ngay sẽ làm mất công việc.
    */
   async onModuleDestroy(): Promise<void> {
     this.logger.log(
-      'Mongo job queue dung (job dang chay se het lease roi chay lai)',
+      'Hàng đợi MongoDB đã dừng (công việc đang chạy sẽ được nhận lại khi hết hạn)',
     );
   }
 
-  /* -------------------------------------------------------------- helpers */
+  /* --------------------------------- Tiện ích */
 
-  /** Xoa job cu xong, giữ `keepFinished` ban ghi moi nhat de tránh phinh toan. */
+  /** Xóa công việc đã kết thúc quá lâu để tránh làm cơ sở dữ liệu phình to. */
   async purgeCompleted(olderThanDays = 7): Promise<number> {
     const deadline = new Date(Date.now() - olderThanDays * 86_400_000);
     const res = await this.jobModel.deleteMany({

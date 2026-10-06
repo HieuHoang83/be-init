@@ -18,5 +18,5 @@ export class AppController {
     // private readonly authservice: AuthService,
   ) {}
 
-  //public de ngan kiem tra token cho ham login
+  // Đặt tuyến đăng nhập ở chế độ công khai để không yêu cầu token.
 }

@@ -1,15 +1,15 @@
 /**
- * Tao role + user Super Admin de dang nhap lay token cho API.
+ * Tạo vai trò và tài khoản Super Admin để đăng nhập lấy token API.
  *
- * Dung `POST /api/v1/auth/register` truc tiep chua duoc: endpoint do can Role
- * ton tai truoc, ma bang `roles` rong khi moi cai BE.
+ * Chưa thể gọi trực tiếp `POST /api/v1/auth/register`: endpoint cần có vai trò
+ * trước, nhưng collection `roles` đang trống khi cài BE mới.
  *
  *   npm run seed:admin
  *
- * Mac dinh: 0961277630 / 123456. Ghi de qua bien moi truong:
+ * Mặc định: 0961277630 / 123456. Có thể ghi đè bằng biến môi trường:
  *   ADMIN_PHONE=... ADMIN_PASSWORD=... ADMIN_NAME=...
  *
- * Khong commit mat khau nay - chi dung o moi truong local/dev.
+ * Không commit mật khẩu này; chỉ dùng trong môi trường local/dev.
  */
 import { NestFactory } from '@nestjs/core';
 import { getModelToken } from '@nestjs/mongoose';
@@ -18,7 +18,7 @@ import { AppModule } from '../src/app.module';
 import { AuthService } from '../src/auth/auth.service';
 import { Role, RoleDocument } from '../src/user/user.entity';
 
-/** Role he thong - `registerUser` gan role theo ten, ten phai ton tai truoc */
+/** Vai trò hệ thống; `registerUser` tìm theo tên nên vai trò phải tồn tại trước. */
 const ROLES = ['Super Admin', 'Assistant Admin', 'Customer'] as const;
 
 const DEFAULT_PHONE = '0961277630';
@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   });
 
   try {
-    /* ------------------------------------------------ 1) dam bao co Role */
+    /* ---------------------- 1) Đảm bảo các vai trò đã tồn tại */
 
     const roleModel = app.get<Model<RoleDocument>>(getModelToken(Role.name));
 
@@ -47,7 +47,7 @@ async function main(): Promise<void> {
       }
     }
 
-    /* ---------------------------------------------------- 2) tao user */
+    /* ---------------------- 2) Tạo tài khoản */
 
     const authService = app.get(AuthService);
 
@@ -72,12 +72,12 @@ async function main(): Promise<void> {
       }
     }
 
-    /* -------------------------------------------------------- 3) huong dan */
+    /* ---------------------- 3) Hướng dẫn đăng nhập và gọi API */
 
     console.log('\n--- Dang nhap ---');
     console.log(`curl -X POST http://localhost:3000/api/v1/auth/login \\`);
     console.log(`  -H "Content-Type: application/json" \\`);
-    console.log(`  -d '{"phone":"${phone}","password":"${password}"}'`);
+    console.log(`  -d '{"phone":"${phone}","password":"<ADMIN_PASSWORD>"}'`);
 
     console.log('\n--- So luong khach ---');
     console.log('curl "http://localhost:3000/api/v1/customers/stats" \\');

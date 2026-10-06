@@ -1,25 +1,45 @@
 import mongoose from 'mongoose';
 import fs from 'node:fs';
 
-const text = fs.readFileSync('.env','utf8') + '\n' + fs.readFileSync('atlas-credentials.env','utf8');
-const get = k => { const m = text.match(new RegExp(`^${k}=(.+)$`,'m')); return m ? m[1].trim().replace(/^"|"$/g,'') : undefined; };
+const env = Object.fromEntries(
+  fs
+    .readFileSync('.env', 'utf8')
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/))
+    .filter(Boolean)
+    .map(([, key, value]) => [key, value.replace(/^(['"])(.*)\1$/, '$2')]),
+);
 
-const dbName = get('MONGODB_DB_NAME') || 'be_init';
-const user = get('MONGODB_USERNAME');
-const pass = get('MONGODB_PASSWORD');
-const host = 'cluster0.a7gfn5l.mongodb.net';
-const uri = `mongodb+srv://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${host}/${dbName}`;
+const dbName = env.MONGODB_DB_NAME || 'be_init';
+let uri = env.MONGODB_URI;
 
-console.log('user   :', user);
-console.log('pass len:', (pass||'').length);
-console.log('host   :', host, '| db:', dbName);
-console.log('pass co ky tu dac biet?', /[^A-Za-z0-9]/.test(pass||'') ? 'CO' : 'khong');
+if (!uri && env.MONGODB_USERNAME && env.MONGODB_PASSWORD && env.MONGODB_CLUSTER) {
+  const user = encodeURIComponent(env.MONGODB_USERNAME);
+  const password = encodeURIComponent(env.MONGODB_PASSWORD);
+  uri = `mongodb+srv://${user}:${password}@${env.MONGODB_CLUSTER}/${dbName}`;
+}
+
+if (!uri) {
+  throw new Error('Set MONGODB_URI or MONGODB_USERNAME, MONGODB_PASSWORD, and MONGODB_CLUSTER in .env');
+}
+
+if (!/^mongodb(\+srv)?:\/\/[^/]+\/[^/?]+/.test(uri)) {
+  uri = `${uri.replace(/\/+$/, '')}/${dbName}`;
+}
 
 try {
-  await mongoose.connect(uri, { serverSelectionTimeoutMS: 15000 });
-  console.log('OK, collections:', (await mongoose.connection.db.collections()).map(c=>c.name).join(', ') || '(chua co)');
+  await mongoose.connect(uri, {
+    dbName,
+    serverSelectionTimeoutMS: 15000,
+  });
+  console.log(
+    'OK, collections:',
+    (await mongoose.connection.db.collections())
+      .map((collection) => collection.name)
+      .join(', ') || '(chua co)',
+  );
   await mongoose.disconnect();
 } catch (e) {
   console.log('\nFAIL:', e.name);
-  console.log(String(e.message).split('\n').slice(0,6).join('\n'));
+  console.log(String(e.message).split('\n').slice(0, 6).join('\n'));
 }

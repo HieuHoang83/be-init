@@ -16,7 +16,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   canActivate(context: ExecutionContext) {
-    // lấy ra metadata từ request
+    // Lấy metadata từ yêu cầu.
     const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
       context.getHandler(),
       context.getClass(),
@@ -30,7 +30,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   handleRequest(err: any, user: any, info: any, context: ExecutionContext) {
     // if (user?.email === "admin@gmail.com" || user?.name === "admin") return user;
     const request: Request = context.switchToHttp().getRequest();
-    // You can throw an exception based on either "info" or "err" arguments
+    // Có thể tạo ngoại lệ dựa trên tham số "info" hoặc "err".
     if (err || !user) {
       throw (
         err ||

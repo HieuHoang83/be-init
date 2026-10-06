@@ -3,8 +3,8 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
 
 /**
- * Lop truy cap MongoDB duy nhat cua app (doi chieu PrismaService cho SQL).
- * Dung cho viec kiem tra ket noi / dong ket noi gon khi shutdown.
+ * Dịch vụ quản lý kết nối MongoDB của ứng dụng, tương tự PrismaService cho SQL.
+ * Dùng để kiểm tra kết nối và đóng kết nối khi ứng dụng dừng.
  */
 @Injectable()
 export class MongoService implements OnModuleInit, OnModuleDestroy {
