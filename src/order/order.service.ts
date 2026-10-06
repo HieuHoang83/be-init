@@ -11,6 +11,7 @@ import { Model, Types } from 'mongoose';
 import { appConfig, RuleConfig } from '../config';
 import { extractOrder } from '../core/webhook-payload.util';
 import { OrderPayload } from '../interface/order.interface';
+import { hasRealCustomerIdentity } from './customer-identity.util';
 import { ApiClient } from '../api/api.service';
 import { Customer, CustomerDocument } from './customer.entity';
 import {
@@ -20,6 +21,10 @@ import {
   OrderAction,
   OrderActionDocument,
   OrderDocument,
+  OrderEvent,
+  OrderEventAction,
+  OrderEventDocument,
+  OrderEventSource,
   OrderStatus,
   SkipReason,
 } from './order.entity';
@@ -56,6 +61,8 @@ export class OrderService {
     private readonly customerModel: Model<CustomerDocument>,
     @InjectModel(OrderAction.name)
     private readonly actionModel: Model<OrderActionDocument>,
+    @InjectModel(OrderEvent.name)
+    private readonly eventModel: Model<OrderEventDocument>,
     private readonly apiClient: ApiClient,
     @Inject(appConfig.KEY) config: ConfigType<typeof appConfig>,
   ) {
@@ -71,49 +78,96 @@ export class OrderService {
   ): Promise<UpsertResult> {
     const isOrderCreatedEvent =
       topic === 'orders/create' || topic === 'orders/created';
+    const existing = await this.orderModel
+      .findOne({ orgId, haravanOrderId: payload.id })
+      .select(
+        'status orderName orderNumber customerName email phone financialStatus fulfillmentStatus confirmedStatus haravanStatus gateway sourceName totalPrice subtotalPrice totalTax totalDiscounts itemCount lineItems shippingAddress billingAddress payload',
+      )
+      .lean()
+      .exec();
+    const effectivePayload = this.mergeOrderPayload(existing?.payload, payload);
     const orderNumber =
-      payload.order_number ?? payload.name ?? String(payload.id);
+      payload.order_number ??
+      payload.name ??
+      existing?.orderNumber ??
+      String(payload.id);
     const orderName =
-      payload.name ?? payload.order_number ?? String(payload.id);
+      payload.name ??
+      payload.order_number ??
+      existing?.orderName ??
+      String(payload.id);
     const update: Record<string, unknown> = {
       orderNumber,
       orderName,
-      financialStatus: payload.financial_status ?? null,
-      fulfillmentStatus: payload.fulfillment_status ?? null,
-      confirmedStatus: payload.confirmed_status ?? null,
-      cancelledStatus: payload.cancelled_status ?? null,
-      closedStatus: payload.closed_status ?? null,
-      cancelReason: payload.cancel_reason ?? null,
-      gateway: payload.gateway ?? null,
-      sourceName: payload.source_name ?? null,
-      totalPrice: payload.total_price ?? 0,
-      subtotalPrice: payload.subtotal_price ?? 0,
-      totalTax: payload.total_tax ?? 0,
-      totalDiscounts: payload.total_discounts ?? 0,
-      currency: payload.currency ?? 'VND',
-      itemCount: (payload.line_items ?? []).reduce(
-        (sum, li) => sum + (li?.quantity ?? 0),
-        0,
-      ),
-      lineItems: payload.line_items ?? [],
-      shippingAddress: payload.shipping_address ?? undefined,
-      billingAddress: payload.billing_address ?? undefined,
-      payload,
+      payload: effectivePayload,
       lastWebhookAt: new Date(),
-      lastWebhookTopic: topic,
     };
 
-    const already = await this.orderModel
-      .findOne({ orgId, haravanOrderId: payload.id })
-      .select('status')
-      .lean()
-      .exec();
-    if (!already || already.status !== OrderStatus.CONFIRMED) {
+    const hasField = (field: keyof OrderPayload) =>
+      Object.prototype.hasOwnProperty.call(payload, field);
+    const setWhenPresent = (
+      sourceField: keyof OrderPayload,
+      targetField: string,
+      value: unknown = effectivePayload[sourceField],
+    ) => {
+      if (hasField(sourceField)) update[targetField] = value;
+    };
+    const lifecycleFields: Array<keyof OrderPayload> = [
+      'status',
+      'cancelled_status',
+      'closed_status',
+      'cancelled_at',
+      'closed_at',
+    ];
+    if (
+      lifecycleFields.some((field) =>
+        Object.prototype.hasOwnProperty.call(effectivePayload, field),
+      )
+    ) {
+      const haravanStatus = this.getHaravanOrderStatus(effectivePayload);
+      if (haravanStatus !== null || lifecycleFields.some(hasField)) {
+        update['haravanStatus'] = haravanStatus;
+      }
+    }
+    setWhenPresent('financial_status', 'financialStatus');
+    setWhenPresent('fulfillment_status', 'fulfillmentStatus');
+    setWhenPresent('confirmed_status', 'confirmedStatus');
+    setWhenPresent('cancelled_status', 'cancelledStatus');
+    setWhenPresent('closed_status', 'closedStatus');
+    setWhenPresent('cancel_reason', 'cancelReason');
+    setWhenPresent('gateway', 'gateway');
+    setWhenPresent('source_name', 'sourceName');
+    setWhenPresent('total_price', 'totalPrice', payload.total_price ?? 0);
+    setWhenPresent(
+      'subtotal_price',
+      'subtotalPrice',
+      payload.subtotal_price ?? 0,
+    );
+    setWhenPresent('total_tax', 'totalTax', payload.total_tax ?? 0);
+    setWhenPresent(
+      'total_discounts',
+      'totalDiscounts',
+      payload.total_discounts ?? 0,
+    );
+    setWhenPresent('currency', 'currency', payload.currency ?? 'VND');
+    if (hasField('line_items')) {
+      const lineItems = payload.line_items ?? [];
+      update['itemCount'] = lineItems.reduce(
+        (sum, lineItem) => sum + (lineItem?.quantity ?? 0),
+        0,
+      );
+      update['lineItems'] = lineItems;
+    }
+    setWhenPresent('shipping_address', 'shippingAddress');
+    setWhenPresent('billing_address', 'billingAddress');
+    if (topic !== undefined) update['lastWebhookTopic'] = topic;
+
+    if (!existing || existing.status !== OrderStatus.CONFIRMED) {
       update['status'] = OrderStatus.PENDING;
     }
 
     for (const [field, value] of Object.entries(
-      this.buildCustomerPatch(payload, isOrderCreatedEvent),
+      this.buildCustomerPatch(effectivePayload, isOrderCreatedEvent),
     )) {
       if (value !== undefined) update[field] = value;
     }
@@ -126,6 +180,25 @@ export class OrderService {
       )
       .exec();
 
+    const changedFields = this.getChangedOrderFields(
+      existing,
+      effectivePayload,
+      update,
+    );
+    await this.logOrderEvent({
+      orgId,
+      haravanOrderId: payload.id,
+      action: existing ? OrderEventAction.UPDATED : OrderEventAction.CREATED,
+      source,
+      topic,
+      changedFields,
+      description: existing
+        ? changedFields.length
+          ? `Cập nhật đơn hàng từ ${source === 'webhook' ? `webhook ${topic ?? ''}` : source}.`
+          : `Nhận ${source === 'webhook' ? `webhook ${topic ?? ''}` : source}; không có trường đơn hàng thay đổi.`
+        : `Tạo đơn hàng từ ${source === 'webhook' ? `webhook ${topic ?? ''}` : source}.`,
+    });
+
     this.logger.log(
       `Luu don ${orderNumber} (org ${orgId}, source ${source}): ` +
         `${payload.financial_status ?? 'n/a'} / ${
@@ -134,6 +207,35 @@ export class OrderService {
     );
 
     return { created: true, order: doc };
+  }
+
+  private mergeOrderPayload(
+    existing: OrderPayload | undefined,
+    incoming: OrderPayload,
+  ): OrderPayload {
+    return {
+      ...existing,
+      ...incoming,
+      ...(existing?.customer && incoming.customer
+        ? { customer: { ...existing.customer, ...incoming.customer } }
+        : {}),
+      ...(existing?.shipping_address && incoming.shipping_address
+        ? {
+            shipping_address: {
+              ...existing.shipping_address,
+              ...incoming.shipping_address,
+            },
+          }
+        : {}),
+      ...(existing?.billing_address && incoming.billing_address
+        ? {
+            billing_address: {
+              ...existing.billing_address,
+              ...incoming.billing_address,
+            },
+          }
+        : {}),
+    };
   }
 
   /** Chỉ cập nhật các trường khách hàng có dữ liệu. */
@@ -182,6 +284,38 @@ export class OrderService {
 
   private orNull<T>(value: T | null | undefined): T | null {
     return value === undefined || value === null ? null : value;
+  }
+
+  private getHaravanOrderStatus(
+    payload: OrderPayload,
+  ): 'open' | 'closed' | 'cancelled' | null {
+    const status = payload.status?.toLowerCase();
+    if (status === 'open' || status === 'closed' || status === 'cancelled') {
+      return status;
+    }
+    const cancelledStatus = payload.cancelled_status?.toLowerCase();
+    if (
+      cancelledStatus === 'cancelled' ||
+      cancelledStatus === 'true' ||
+      payload.cancelled_at
+    ) {
+      return 'cancelled';
+    }
+    const closedStatus = payload.closed_status?.toLowerCase();
+    if (
+      closedStatus === 'closed' ||
+      closedStatus === 'true' ||
+      payload.closed_at
+    ) {
+      return 'closed';
+    }
+    if (
+      cancelledStatus === 'uncancelled' &&
+      closedStatus === 'unclosed'
+    ) {
+      return 'open';
+    }
+    return null;
   }
 
   /** Chuẩn hóa số điện thoại để so khớp khách hàng. */
@@ -283,6 +417,15 @@ export class OrderService {
     order: OrderDocument,
   ): Promise<{ priorOrderCount: number; priorSpent: number }> {
     const cust = order.customer;
+    const identity = {
+      haravanId: cust?.haravanId,
+      email: cust?.email ?? order.email,
+      phone: cust?.phone ?? order.phone,
+      fullName: cust?.fullName ?? order.customerName,
+    };
+    if (!hasRealCustomerIdentity(identity)) {
+      return { priorOrderCount: 0, priorSpent: 0 };
+    }
 
     const phone =
       OrderService.normalizePhone(cust?.phone) ??
@@ -329,10 +472,12 @@ export class OrderService {
     });
 
     if (
-      !order.customer?.haravanId &&
-      !order.customer?.email &&
-      !order.customer?.phone &&
-      !order.phone
+      !hasRealCustomerIdentity({
+        haravanId: order.customer?.haravanId,
+        email: order.customer?.email ?? order.email,
+        phone: order.customer?.phone ?? order.phone,
+        fullName: order.customer?.fullName ?? order.customerName,
+      })
     ) {
       return skip(SkipReason.NO_CUSTOMER);
     }
@@ -344,7 +489,7 @@ export class OrderService {
       return skip(SkipReason.ORDER_CANCELLED);
     }
 
-    if (order.confirmedStatus === 'confirmed') {
+    if (order.payload?.confirmed_status?.toLowerCase() === 'confirmed') {
       return skip(SkipReason.ALREADY_CONFIRMED);
     }
 
@@ -499,6 +644,18 @@ export class OrderService {
       order.processing = { ...order.processing, ...toProcessing(decision) };
       await order.save();
 
+      if (manual) {
+        await this.logOrderEvent({
+          orgId,
+          haravanOrderId,
+          action: OrderEventAction.CONFIRM_FAILED,
+          source: 'user',
+          actor,
+          changedFields: ['status', 'processing.reason'],
+          description: `Thao tác xác nhận bị bỏ qua: ${decision.skipReason}.`,
+        });
+      }
+
       await this.logAction(
         orgId,
         haravanOrderId,
@@ -527,9 +684,21 @@ export class OrderService {
       const res = await this.apiClient.confirmOrder(orgId, haravanOrderId);
 
       order.status = OrderStatus.CONFIRMED;
-      order.confirmedStatus = 'confirmed';
       order.processing = { ...order.processing, ...toProcessing(decision) };
       await order.save();
+
+      if (manual) {
+        await this.logOrderEvent({
+          orgId,
+          haravanOrderId,
+          action: OrderEventAction.CONFIRM_REQUESTED,
+          source: 'user',
+          actor,
+          changedFields: ['status', 'processing'],
+          description:
+            'Đã gửi yêu cầu xác nhận; trạng thái sẽ cập nhật theo payload webhook Haravan.',
+        });
+      }
 
       const actionLogId = await this.logAction(
         orgId,
@@ -550,7 +719,9 @@ export class OrderService {
         },
       );
 
-      this.logger.log(`Da xac nhan don ${haravanOrderId} (org ${orgId})`);
+      this.logger.log(
+        `Da gui yeu cau xac nhan don ${haravanOrderId} (org ${orgId})`,
+      );
 
       return { order, confirmed: true, decision, actionLogId };
     } catch (error) {
@@ -564,6 +735,18 @@ export class OrderService {
         error: message,
       };
       await order.save();
+
+      if (manual) {
+        await this.logOrderEvent({
+          orgId,
+          haravanOrderId,
+          action: OrderEventAction.CONFIRM_FAILED,
+          source: 'user',
+          actor,
+          changedFields: ['status', 'processing.reason', 'processing.error'],
+          description: 'Người dùng xác nhận đơn hàng nhưng thao tác thất bại.',
+        });
+      }
 
       await this.logAction(
         orgId,
@@ -635,13 +818,12 @@ export class OrderService {
       items.map(async (order) => {
         const doc = order.toObject() as unknown as Record<string, unknown>;
         const processing = (doc['processing'] ?? {}) as Record<string, unknown>;
-        const hasCustomerIdentity = Boolean(
-          order.customer?.haravanId ||
-            order.customer?.email?.trim() ||
-            order.customer?.phone?.trim() ||
-            order.email?.trim() ||
-            order.phone?.trim(),
-        );
+        const hasCustomerIdentity = hasRealCustomerIdentity({
+          haravanId: order.customer?.haravanId,
+          email: order.customer?.email ?? order.email,
+          phone: order.customer?.phone ?? order.phone,
+          fullName: order.customer?.fullName ?? order.customerName,
+        });
         const name =
           order.orderName ??
           order.orderNumber ??
@@ -658,12 +840,11 @@ export class OrderService {
             isReturningCustomer: processing['isReturningCustomer'],
             priorOrderCount,
             priorSpent: processing['priorSpent'] ?? 0,
-            customerOrderNumber:
-              Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
+            customerOrderNumber: !hasCustomerIdentity
+              ? null
+              : Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
                 ? payloadOrderNumber
-                : hasCustomerIdentity
-                  ? priorOrderCount + 1
-                  : null,
+                : priorOrderCount + 1,
           };
         }
 
@@ -679,12 +860,11 @@ export class OrderService {
           isReturningCustomer: isReturning,
           priorOrderCount,
           priorSpent: processing['priorSpent'] ?? 0,
-          customerOrderNumber:
-            Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
+          customerOrderNumber: !hasCustomerIdentity
+            ? null
+            : Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
               ? payloadOrderNumber
-              : hasCustomerIdentity
-                ? priorOrderCount + 1
-                : null,
+              : priorOrderCount + 1,
         };
       }),
     );
@@ -696,6 +876,18 @@ export class OrderService {
     limit = 100,
   ): Promise<unknown[]> {
     return this.actionModel
+      .find({ orgId, haravanOrderId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .exec();
+  }
+
+  async findEvents(
+    orgId: number,
+    haravanOrderId: number,
+    limit = 100,
+  ): Promise<OrderEventDocument[]> {
+    return this.eventModel
       .find({ orgId, haravanOrderId })
       .sort({ createdAt: -1 })
       .limit(limit)
@@ -765,6 +957,81 @@ export class OrderService {
       apiCall: extra.apiCall,
     });
     return doc._id;
+  }
+
+  private async logOrderEvent(event: {
+    orgId: number;
+    haravanOrderId: number;
+    action: OrderEventAction;
+    source: OrderEventSource;
+    description: string;
+    changedFields?: string[];
+    actor?: string;
+    topic?: string;
+  }): Promise<void> {
+    await this.eventModel.create({
+      ...event,
+      changedFields: event.changedFields ?? [],
+    });
+  }
+
+  private getChangedOrderFields(
+    existing: Record<string, unknown> | null,
+    payload: OrderPayload,
+    update: Record<string, unknown>,
+  ): string[] {
+    const previousPayload = (existing?.['payload'] ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const fields: Array<{ label: string; current: unknown; previous: unknown }> = [
+      { label: 'status', current: update['status'], previous: existing?.['status'] },
+      { label: 'orderName', current: update['orderName'], previous: existing?.['orderName'] },
+      { label: 'orderNumber', current: update['orderNumber'], previous: existing?.['orderNumber'] },
+      { label: 'customerName', current: update['customerName'], previous: existing?.['customerName'] },
+      { label: 'email', current: update['email'], previous: existing?.['email'] },
+      { label: 'phone', current: update['phone'], previous: existing?.['phone'] },
+      { label: 'financialStatus', current: update['financialStatus'], previous: existing?.['financialStatus'] },
+      { label: 'fulfillmentStatus', current: update['fulfillmentStatus'], previous: existing?.['fulfillmentStatus'] },
+      { label: 'confirmedStatus', current: update['confirmedStatus'], previous: existing?.['confirmedStatus'] },
+      { label: 'haravanStatus', current: update['haravanStatus'], previous: existing?.['haravanStatus'] },
+      { label: 'gateway', current: update['gateway'], previous: existing?.['gateway'] },
+      { label: 'sourceName', current: update['sourceName'], previous: existing?.['sourceName'] },
+      { label: 'totalPrice', current: update['totalPrice'], previous: existing?.['totalPrice'] },
+      { label: 'subtotalPrice', current: update['subtotalPrice'], previous: existing?.['subtotalPrice'] },
+      { label: 'totalTax', current: update['totalTax'], previous: existing?.['totalTax'] },
+      { label: 'totalDiscounts', current: update['totalDiscounts'], previous: existing?.['totalDiscounts'] },
+      { label: 'itemCount', current: update['itemCount'], previous: existing?.['itemCount'] },
+      { label: 'lineItems', current: update['lineItems'], previous: existing?.['lineItems'] },
+      { label: 'shippingAddress', current: update['shippingAddress'], previous: existing?.['shippingAddress'] },
+      { label: 'billingAddress', current: update['billingAddress'], previous: existing?.['billingAddress'] },
+      { label: 'note', current: payload.note, previous: previousPayload['note'] },
+      {
+        label: 'discount_codes',
+        current: payload.discount_codes,
+        previous: previousPayload['discount_codes'],
+      },
+      {
+        label: 'discount_applications',
+        current: payload.discount_applications,
+        previous: previousPayload['discount_applications'],
+      },
+      {
+        label: 'note_attributes',
+        current: payload.note_attributes,
+        previous: previousPayload['note_attributes'],
+      },
+    ];
+
+    return fields
+      .filter(({ current, previous }) => {
+        if (current === undefined) return false;
+        return (
+          !existing ||
+          JSON.stringify(current ?? null) !== JSON.stringify(previous ?? null)
+        );
+      })
+      .map(({ label }) => label);
   }
 
   /** Tìm đơn để chạy lại webhook lỗi. */

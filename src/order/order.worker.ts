@@ -4,6 +4,7 @@ import { logOrderDecision } from '../core/order-decision-logger';
 import { WebhookPrivateStatus } from '../webhook-private/webhook-private.entity';
 import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
 import { OrderService } from './order.service';
+import { hasRealCustomerIdentity } from './customer-identity.util';
 import { Job, JobQueue, JOB_NAMES } from '../queue/queue.service';
 
 export interface OrderCreatedPayload {
@@ -68,13 +69,16 @@ export class OrderWorker implements OnModuleInit {
 
       let priorHistory: { priorOrderCount: number; priorSpent: number } | null =
         null;
-      const hasCustomerIdentity = Boolean(
-        payload.customer?.id ||
-          payload.customer?.email?.trim() ||
-          payload.customer?.phone?.trim() ||
-          payload.email?.trim() ||
-          payload.shipping_address?.phone?.trim(),
-      );
+      const hasCustomerIdentity = hasRealCustomerIdentity({
+        haravanId: payload.customer?.id,
+        email: payload.customer?.email ?? payload.email,
+        phone: payload.customer?.phone ?? payload.shipping_address?.phone,
+        fullName:
+          payload.shipping_address?.name ??
+          [payload.customer?.first_name, payload.customer?.last_name]
+            .filter(Boolean)
+            .join(' '),
+      });
       if (hasCustomerIdentity) {
         try {
           priorHistory = await this.orderService.countPriorOrders(

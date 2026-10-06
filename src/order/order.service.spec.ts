@@ -7,6 +7,7 @@ import {
   OrderAction,
   OrderActionDocument,
   OrderDocument,
+  OrderEvent,
   OrderStatus,
   SkipReason,
 } from './order.entity';
@@ -54,6 +55,18 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     create: jest.fn(async (doc: unknown) => ({
       _id: 'action-id',
       ...(doc as object),
+    })),
+  };
+
+  const eventModel = {
+    create: jest.fn(async (doc: unknown) => ({
+      _id: 'event-id',
+      ...(doc as object),
+    })),
+    find: jest.fn(() => ({
+      sort: () => ({
+        limit: () => queryMock([]),
+      }),
     })),
   };
 
@@ -105,6 +118,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
         { provide: ApiClient, useValue: apiMock },
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(OrderAction.name), useValue: actionModel },
+        { provide: getModelToken(OrderEvent.name), useValue: eventModel },
         { provide: getModelToken(Customer.name), useValue: customerModel },
       ],
     }).compile();
@@ -209,6 +223,205 @@ describe('OrderService - evaluateConfirmEligibility', () => {
         }),
         expect.any(Object),
       );
+    });
+  });
+
+  describe('cap nhat webhook don hang', () => {
+    it('giu cac truong cu khi webhook update chi gui mot phan payload', async () => {
+      const previousPayload = {
+        id: 200,
+        status: 'open' as const,
+        cancelled_status: 'uncancelled',
+        closed_status: 'unclosed',
+        note: 'Ghi chú cũ',
+        total_price: 300000,
+        line_items: [{ title: 'Sản phẩm A', quantity: 2, price: 150000 }],
+        customer: { id: 55, email: 'old@example.com', first_name: 'An' },
+      };
+      orderModel.findOne.mockImplementation(
+        () => ({
+          select: () => ({
+            lean: () =>
+              queryMock({
+                status: OrderStatus.PROCESSING,
+                orderName: '#200',
+                orderNumber: '#200',
+                totalPrice: 300000,
+                financialStatus: 'pending',
+                payload: previousPayload,
+              }),
+          }),
+        }) as never,
+      );
+      orderModel.findOneAndUpdate.mockImplementation(
+        () => queryMock({ orderName: '#200' }) as never,
+      );
+      service = await makeService();
+
+      await service.upsertOrder(
+        1,
+        { id: 200, financial_status: 'paid' },
+        'webhook',
+        'orders/updated',
+      );
+
+      const update = orderModel.findOneAndUpdate.mock.calls[0][1] as {
+        $set: Record<string, unknown>;
+      };
+      expect(update.$set).toMatchObject({
+        haravanStatus: 'open',
+        financialStatus: 'paid',
+        payload: {
+          status: 'open',
+          note: 'Ghi chú cũ',
+          total_price: 300000,
+          customer: { email: 'old@example.com', first_name: 'An' },
+        },
+      });
+      expect(update.$set).not.toHaveProperty('totalPrice');
+      expect(update.$set).not.toHaveProperty('lineItems');
+    });
+
+    it('ghi nhận cập nhật trạng thái lifecycle khi webhook gửi cờ hủy', async () => {
+      orderModel.findOne.mockImplementation(
+        () => ({
+          select: () => ({
+            lean: () =>
+              queryMock({
+                status: OrderStatus.PROCESSING,
+                orderName: '#201',
+                orderNumber: '#201',
+                payload: {
+                  id: 201,
+                  cancelled_status: 'uncancelled',
+                  closed_status: 'unclosed',
+                },
+              }),
+          }),
+        }) as never,
+      );
+      orderModel.findOneAndUpdate.mockImplementation(
+        () => queryMock({ orderName: '#201' }) as never,
+      );
+      service = await makeService();
+
+      await service.upsertOrder(
+        1,
+        {
+          id: 201,
+          cancelled_status: 'cancelled',
+          cancelled_at: '2026-10-06T04:43:30.160Z',
+        },
+        'webhook',
+        'orders/cancelled',
+      );
+
+      const update = orderModel.findOneAndUpdate.mock.calls[0][1] as {
+        $set: Record<string, unknown>;
+      };
+      expect(update.$set).toMatchObject({
+        haravanStatus: 'cancelled',
+        cancelledStatus: 'cancelled',
+      });
+      expect(eventModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'order_updated',
+          changedFields: expect.arrayContaining(['haravanStatus']),
+        }),
+      );
+    });
+  });
+
+  describe('nhat ky su kien don hang', () => {
+    it('ghi lai webhook tao don va cac truong nghiep vu thay doi', async () => {
+      const savedOrder = { orderName: '#10021' };
+      orderModel.findOne.mockImplementation(
+        () => ({ select: () => ({ lean: () => queryMock(null) }) }) as never,
+      );
+      orderModel.findOneAndUpdate.mockImplementation(
+        () => queryMock(savedOrder) as never,
+      );
+      service = await makeService();
+
+      await service.upsertOrder(
+        7,
+        {
+          id: 1849918600,
+          name: '#10021',
+          total_price: 150000,
+          note: 'Gọi trước khi giao',
+          line_items: [{ title: 'Sản phẩm A', quantity: 1, price: 150000 }],
+        },
+        'webhook',
+        'orders/create',
+      );
+
+      expect(eventModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orgId: 7,
+          haravanOrderId: 1849918600,
+          action: 'order_created',
+          source: 'webhook',
+          topic: 'orders/create',
+          changedFields: expect.arrayContaining([
+            'orderName',
+            'totalPrice',
+            'lineItems',
+            'note',
+          ]),
+        }),
+      );
+    });
+
+    it('chỉ ghi các trường nghiệp vụ thay đổi cho webhook cập nhật', async () => {
+      orderModel.findOne.mockImplementation(
+        () => ({
+          select: () => ({
+            lean: () =>
+              queryMock({
+                status: OrderStatus.PENDING,
+                orderName: '#10021',
+                orderNumber: '#10021',
+                totalPrice: 150000,
+                subtotalPrice: 150000,
+                totalTax: 0,
+                totalDiscounts: 0,
+                itemCount: 1,
+                lineItems: [{ title: 'Sản phẩm A', quantity: 1, price: 150000 }],
+                payload: { note: 'Ghi chú cũ' },
+              }),
+          }),
+        }) as never,
+      );
+      orderModel.findOneAndUpdate.mockImplementation(
+        () => queryMock({ orderName: '#10021' }) as never,
+      );
+      service = await makeService();
+
+      await service.upsertOrder(
+        7,
+        {
+          id: 1849918600,
+          name: '#10021',
+          total_price: 180000,
+          note: 'Ghi chú mới',
+          line_items: [{ title: 'Sản phẩm A', quantity: 1, price: 180000 }],
+        },
+        'webhook',
+        'orders/updated',
+      );
+
+      expect(eventModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'order_updated',
+          source: 'webhook',
+          changedFields: expect.arrayContaining(['totalPrice', 'lineItems', 'note']),
+        }),
+      );
+      const event = eventModel.create.mock.calls[0][0] as {
+        changedFields: string[];
+      };
+      expect(event.changedFields).not.toContain('orderName');
     });
   });
 
@@ -500,10 +713,26 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       service = await makeService();
       const decision = await service.evaluateConfirmEligibility(
         1,
-        buildOrder({ confirmedStatus: 'confirmed' }),
+        buildOrder({
+          confirmedStatus: 'unconfirmed',
+          payload: { id: 2, confirmed_status: 'confirmed' },
+        }),
       );
 
       expect(decision.skipReason).toBe(SkipReason.ALREADY_CONFIRMED);
+    });
+
+    it('uses payload confirmation state instead of the normalized cache', async () => {
+      service = await makeService();
+      const decision = await service.evaluateConfirmEligibility(
+        1,
+        buildOrder({
+          confirmedStatus: 'confirmed',
+          payload: { id: 2, confirmed_status: 'unconfirmed' },
+        }),
+      );
+
+      expect(decision.skipReason).not.toBe(SkipReason.ALREADY_CONFIRMED);
     });
 
     it('don da huy -> skip order_cancelled', async () => {
@@ -544,6 +773,48 @@ describe('OrderService - evaluateConfirmEligibility', () => {
   });
 
   describe('dem order truoc tu DB', () => {
+    it('does not count virtual guest customers as an order sequence', async () => {
+      service = await makeService();
+
+      const result = await service.countPriorOrders(
+        1,
+        buildOrder({
+          customer: {
+            haravanId: 1849918600,
+            email: 'guest@haravan.com',
+          } as Order['customer'],
+          email: 'guest@haravan.com',
+        }),
+      );
+
+      expect(result).toEqual({ priorOrderCount: 0, priorSpent: 0 });
+      expect(orderModel.countDocuments).not.toHaveBeenCalled();
+      expect(orderModel.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('does not count or auto-confirm a virtual guest with a placeholder ID', async () => {
+      service = await makeService();
+
+      const decision = await service.evaluateConfirmEligibility(
+        1,
+        buildOrder({
+          customer: {
+            haravanId: 1176261171,
+            email: 'guest@haravan.com',
+            ordersCount: 0,
+          } as Order['customer'],
+          email: 'guest@haravan.com',
+        }),
+      );
+
+      expect(decision).toMatchObject({
+        shouldConfirm: false,
+        priorOrderCount: 0,
+        skipReason: SkipReason.NO_CUSTOMER,
+      });
+      expect(orderModel.countDocuments).not.toHaveBeenCalled();
+    });
+
     it('dem cac order da luu, khong phu thuoc orders_count', async () => {
       orderModel.countDocuments.mockImplementation(() => queryMock(3));
       orderModel.aggregate.mockImplementation(() =>
@@ -598,7 +869,9 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     it('goi Harovan API khi du dieu kien', async () => {
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
-      const order = buildOrder();
+      const order = buildOrder({
+        payload: { id: 2, confirmed_status: 'unconfirmed' },
+      });
       orderModel.findOne.mockImplementation(() => queryMock(order));
 
       const res = await service.confirmOrder({
@@ -609,7 +882,8 @@ describe('OrderService - evaluateConfirmEligibility', () => {
 
       expect(apiMock.confirmOrder).toHaveBeenCalledWith(1, 2);
       expect(res.confirmed).toBe(true);
-      expect(order.confirmedStatus).toBe('confirmed');
+      expect(order.confirmedStatus).toBe('unconfirmed');
+      expect(order.payload?.confirmed_status).toBe('unconfirmed');
     });
 
     it('force=true bo qua rule, xac nhan du khach moi', async () => {
@@ -625,6 +899,15 @@ describe('OrderService - evaluateConfirmEligibility', () => {
 
       expect(apiMock.confirmOrder).toHaveBeenCalled();
       expect(res.confirmed).toBe(true);
+      expect(eventModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'order_confirm_requested',
+          source: 'user',
+          actor: 'admin',
+          changedFields: expect.arrayContaining(['status', 'processing']),
+          description: expect.stringContaining('payload webhook Haravan'),
+        }),
+      );
     });
 
     it('API that bai -> nem loi de queue retry', async () => {

@@ -88,6 +88,15 @@ export const FINANCIAL_STATUSES = [
 
 export type FinancialStatus = typeof FINANCIAL_STATUSES[number];
 
+export const HARAVAN_FINANCIAL_FILTERS = [
+  'pending',
+  'paid',
+  'partially_paid',
+  'refunded',
+  'voided',
+  'partially_refunded',
+] as const;
+
 export const FULFILLMENT_STATUSES = [
   'fulfilled',
   'notfulfilled',
@@ -97,8 +106,26 @@ export const FULFILLMENT_STATUSES = [
 
 export type FulfillmentStatus = typeof FULFILLMENT_STATUSES[number] | null;
 
+export const HARAVAN_FULFILLMENT_FILTERS = [
+  'unshipped',
+  'shipped',
+  'partial',
+] as const;
+
+export type HaravanFulfillmentFilter =
+  typeof HARAVAN_FULFILLMENT_FILTERS[number];
+
+export const HARAVAN_ORDER_STATUSES = [
+  'open',
+  'closed',
+  'cancelled',
+] as const;
+
+export type HaravanOrderStatus = typeof HARAVAN_ORDER_STATUSES[number];
+
 export interface OrderPayload {
   id: number;
+  status?: HaravanOrderStatus | null;
   name?: string | null;
   order_number?: string | null;
   number?: number | null;

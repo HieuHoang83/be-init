@@ -1,17 +1,29 @@
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsDateString,
   IsIn,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Max,
   Min,
 } from 'class-validator';
-import { FINANCIAL_STATUSES, FinancialStatus } from '../../interface/order.interface';
-import { OrderStatus } from '../order.entity';
+import {
+  HARAVAN_FINANCIAL_FILTERS,
+  FinancialStatus,
+  HARAVAN_FULFILLMENT_FILTERS,
+  HARAVAN_ORDER_STATUSES,
+  HaravanOrderStatus,
+} from '../../interface/order.interface';
 import { WebhookPrivateStatus } from '../../webhook-private/webhook-private.entity';
+
+function csvListPattern(values: readonly string[]) {
+  const alternatives = values.join('|');
+  return new RegExp(`^(${alternatives})(,(${alternatives}))*$`);
+}
 
 export class ListOrdersQuery {
   @IsOptional() @Type(() => Number) @IsInt()
@@ -23,14 +35,43 @@ export class ListOrdersQuery {
   @IsOptional() @IsString()
   orderNumber?: string;
 
-  @IsOptional() @IsIn(Object.values(OrderStatus))
-  status?: OrderStatus;
+  @IsOptional() @IsString()
+  search?: string;
 
-  @IsOptional() @IsIn(FINANCIAL_STATUSES)
+  @IsOptional() @IsIn([...HARAVAN_ORDER_STATUSES, 'any'])
+  status?: HaravanOrderStatus | 'any';
+
+  @IsOptional() @IsIn(HARAVAN_FINANCIAL_FILTERS)
   financialStatus?: FinancialStatus;
+
+  @IsOptional() @IsString()
+  @Matches(csvListPattern(HARAVAN_FINANCIAL_FILTERS))
+  financialStatuses?: string;
+
+  @IsOptional() @IsString()
+  @Matches(csvListPattern(HARAVAN_FULFILLMENT_FILTERS))
+  fulfillmentStatuses?: string;
+
+  @IsOptional() @IsString()
+  @Matches(csvListPattern(HARAVAN_ORDER_STATUSES))
+  haravanStatuses?: string;
+
+  @IsOptional() @IsString()
+  @Matches(csvListPattern(['first', 'repeat']))
+  customerOrderTypes?: string;
 
   @IsOptional() @IsIn(['confirmed', 'unconfirmed'])
   confirmedStatus?: string;
+
+  @IsOptional() @IsString()
+  @Matches(/^(confirmed|unconfirmed)(,(confirmed|unconfirmed))*$/)
+  confirmedStatuses?: string;
+
+  @IsOptional() @IsDateString()
+  createdFrom?: string;
+
+  @IsOptional() @IsDateString()
+  createdTo?: string;
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(1)
   page?: number;

@@ -12,6 +12,8 @@ import {
   Order,
   OrderAction,
   OrderActionSchema,
+  OrderEvent,
+  OrderEventSchema,
   OrderSchema,
 } from './order.entity';
 import { Customer, CustomerSchema } from './customer.entity';
@@ -26,6 +28,7 @@ import { Customer, CustomerSchema } from './customer.entity';
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: OrderAction.name, schema: OrderActionSchema },
+      { name: OrderEvent.name, schema: OrderEventSchema },
       { name: Customer.name, schema: CustomerSchema },
     ]),
   ],

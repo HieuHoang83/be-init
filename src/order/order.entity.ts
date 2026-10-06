@@ -102,6 +102,9 @@ export class Order {
   /** Trạng thái xác nhận trên Haravan. */
   @Prop() confirmedStatus?: string;
 
+  @Prop({ type: String, enum: ['open', 'closed', 'cancelled'], index: true })
+  haravanStatus?: string;
+
   @Prop() cancelledStatus?: string;
   @Prop() closedStatus?: string;
   @Prop() cancelReason?: string;
@@ -221,3 +224,46 @@ export type OrderActionDocument = HydratedDocument<OrderAction>;
 export const OrderActionSchema = SchemaFactory.createForClass(OrderAction);
 
 OrderActionSchema.index({ orgId: 1, haravanOrderId: 1, createdAt: -1 });
+
+export enum OrderEventAction {
+  CREATED = 'order_created',
+  UPDATED = 'order_updated',
+  CONFIRMED = 'order_confirmed',
+  CONFIRM_REQUESTED = 'order_confirm_requested',
+  CONFIRM_FAILED = 'order_confirm_failed',
+}
+
+export type OrderEventSource = 'webhook' | 'user' | 'system' | 'api' | 'manual';
+
+/** Business-level order changes; unlike processing actions, these are user-facing audit events. */
+@Schema({ collection: 'order_events', timestamps: true })
+export class OrderEvent {
+  @Prop({ required: true, index: true })
+  orgId!: number;
+
+  @Prop({ required: true, index: true })
+  haravanOrderId!: number;
+
+  @Prop({ required: true, enum: OrderEventAction })
+  action!: OrderEventAction;
+
+  @Prop({ required: true, enum: ['webhook', 'user', 'system', 'api', 'manual'] })
+  source!: OrderEventSource;
+
+  @Prop({ required: true })
+  description!: string;
+
+  @Prop({ type: [String], default: [] })
+  changedFields!: string[];
+
+  @Prop()
+  actor?: string;
+
+  @Prop()
+  topic?: string;
+}
+export type OrderEventDocument = HydratedDocument<OrderEvent>;
+
+export const OrderEventSchema = SchemaFactory.createForClass(OrderEvent);
+
+OrderEventSchema.index({ orgId: 1, haravanOrderId: 1, createdAt: -1 });
