@@ -5,7 +5,8 @@ import { mongoConfig } from '../mongo/mongo.config';
 import { appConfig } from './config';
 import { ApiModule } from './api/api.module';
 import { CustomerModule } from './customer/customer.module';
-import { HaravanModule } from './haravan/haravan.module';
+import { HaravanCoreModule } from './haravan-core.module';
+import { DiscountModule } from './discount/discount.module';
 import { OrderModule } from './order/order.module';
 import { QueueModule } from './queue/queue.module';
 import { WebhookPrivateModule } from './webhook-private/webhook-private.module';
@@ -27,7 +28,8 @@ describe('Haravan modules (DI graph)', () => {
         WebhookAppModule,
         OrderModule,
         CustomerModule,
-        HaravanModule,
+        HaravanCoreModule,
+        DiscountModule,
       ],
     }).compile();
 
@@ -49,6 +51,17 @@ describe('Haravan modules (DI graph)', () => {
 
     expect(routes).toContain('GET /webhooks/app');
     expect(routes).toContain('POST /webhooks/app');
+
+    expect(routes).toContain('GET /haravan/:orgId/discounts');
+    expect(routes).toContain('POST /haravan/:orgId/discounts');
+    expect(routes).toContain('GET /haravan/:orgId/discounts/:discountId');
+    expect(routes).toContain(
+      'PUT /haravan/:orgId/discounts/:discountId/enable',
+    );
+    expect(routes).toContain(
+      'PUT /haravan/:orgId/discounts/:discountId/disable',
+    );
+    expect(routes).toContain('DELETE /haravan/:orgId/discounts/:discountId');
 
     await app.close();
   }, 60000);

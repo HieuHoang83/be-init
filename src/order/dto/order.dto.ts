@@ -7,9 +7,14 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateIf,
   Matches,
   Max,
   Min,
+  ArrayMinSize,
+  IsArray,
+  IsEmail,
+  ValidateNested,
 } from 'class-validator';
 import {
   HARAVAN_FINANCIAL_FILTERS,
@@ -141,6 +146,155 @@ export class ConfirmOrderBody {
   @Type(() => Boolean)
   @IsBoolean()
   force?: boolean;
+}
+
+export class CreateOrderLineItem {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  variant_id?: number;
+
+  @ValidateIf((item: CreateOrderLineItem) => item.variant_id === undefined)
+  @IsString()
+  @Matches(/.*\S.*/)
+  title?: string;
+
+  @ValidateIf((item: CreateOrderLineItem) => item.variant_id === undefined)
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  price?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  quantity!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  total_discount?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderAppliedDiscount)
+  applied_discounts?: CreateOrderAppliedDiscount[];
+}
+
+export class CreateOrderAppliedDiscount {
+  @IsString()
+  description!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount!: number;
+}
+
+export class CreateOrderDiscountCode {
+  @IsString()
+  code!: string;
+
+  @IsBoolean()
+  is_coupon_code!: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+}
+
+export class CreateOrderNoteAttribute {
+  @IsString()
+  name!: string;
+
+  @IsString()
+  value!: string;
+}
+
+export class CreateOrderBody {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderLineItem)
+  line_items!: CreateOrderLineItem[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderDiscountCode)
+  discount_codes?: CreateOrderDiscountCode[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  total_discounts?: number;
+
+  @IsOptional()
+  @IsIn(['pending', 'paid'])
+  financial_status?: 'pending' | 'paid';
+
+  @IsOptional()
+  @IsString()
+  gateway?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  is_cod_gateway?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderNoteAttribute)
+  note_attributes?: CreateOrderNoteAttribute[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  customer_id?: number;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsString()
+  first_name?: string;
+
+  @IsOptional()
+  @IsString()
+  last_name?: string;
+
+  @IsOptional()
+  @IsString()
+  address1?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @IsOptional()
+  @IsString()
+  country?: string;
 }
 
 export class GetOrderStatsQuery {

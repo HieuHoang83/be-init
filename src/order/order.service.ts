@@ -13,6 +13,7 @@ import { extractOrder } from '../core/webhook-payload.util';
 import { OrderPayload } from '../interface/order.interface';
 import { hasRealCustomerIdentity } from './customer-identity.util';
 import { ApiClient } from '../api/api.service';
+import { CreateOrderBody } from './dto/order.dto';
 import { Customer, CustomerDocument } from './customer.entity';
 import {
   ActionResult,
@@ -44,6 +45,18 @@ export interface ProcessResult {
   actionLogId?: Types.ObjectId;
 }
 
+function mergeNonNull<T extends object>(
+  existing?: T | null,
+  incoming?: T | null,
+): T | undefined {
+  if (!existing && !incoming) return undefined;
+  const merged: Record<string, unknown> = { ...(existing ?? {}) };
+  for (const [key, value] of Object.entries(incoming ?? {})) {
+    if (value !== undefined && value !== null) merged[key] = value;
+  }
+  return merged as T;
+}
+
 export interface UpsertResult {
   created: boolean;
   order: OrderDocument;
@@ -69,6 +82,202 @@ export class OrderService {
     this.rule = config.rule;
   }
 
+  /** Create an order in Haravan and immediately mirror its response locally. */
+  async createOrder(orgId: number, body: CreateOrderBody) {
+    const {
+      first_name,
+      last_name,
+      address1,
+      city,
+      province,
+      country,
+      customer_id,
+      ...orderFields
+    } = body;
+    const hasAddress = Boolean(
+      address1 || city || province || country,
+    );
+
+    const requestedQuantities = new Map<number, number>();
+    const variantPricing = new Map<number, { price: number; productId?: number }>();
+    for (const item of body.line_items) {
+      if (item.variant_id === undefined) continue;
+      requestedQuantities.set(
+        item.variant_id,
+        (requestedQuantities.get(item.variant_id) ?? 0) + item.quantity,
+      );
+    }
+    await Promise.all(
+      [...requestedQuantities].map(async ([variantId, requestedQuantity]) => {
+        const response = await this.apiClient.call<{
+          variant?: {
+            sku?: string | null;
+            title?: string | null;
+            price?: number | string | null;
+            product_id?: number | null;
+            inventory_management?: string | null;
+            inventory_policy?: string | null;
+            inventory_quantity?: number | null;
+            inventory_advance?: { qty_available?: number | null } | null;
+          };
+        }>(orgId, 'GET', `/variants/${variantId}.json`);
+        const variant = response.body?.variant;
+        if (!variant) {
+          throw new BadRequestException(
+            `Khong tim thay bien the ${variantId} tren Haravan`,
+          );
+        }
+        variantPricing.set(variantId, {
+          price: Number(variant.price ?? 0),
+          productId: variant.product_id ?? undefined,
+        });
+        if (
+          !variant.inventory_management ||
+          variant.inventory_policy === 'continue'
+        ) {
+          return;
+        }
+        const available =
+          variant.inventory_advance?.qty_available ??
+          variant.inventory_quantity ??
+          0;
+        if (requestedQuantity > available) {
+          const name = variant.sku || variant.title || String(variantId);
+          throw new BadRequestException(
+            `Bien the ${name} chi con ${available} san pham kha dung`,
+          );
+        }
+      }),
+    );
+
+    let discountCodes = body.discount_codes;
+    const coupon = body.discount_codes?.find((discount) => discount.is_coupon_code);
+    if (coupon) {
+      const discountResponse = await this.apiClient.call<{
+        discounts?: Array<{
+          code?: string;
+          status?: string;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          value?: number | string | null;
+          discount_type?: string | null;
+          applies_once?: boolean;
+          minimum_order_amount?: number | string | null;
+          max_amount_apply?: number | string | null;
+        }>;
+      }>(orgId, 'GET', '/discounts.json', undefined, { code: coupon.code });
+      const definition = discountResponse.body?.discounts?.find(
+        (item) => item.code?.toLocaleLowerCase() === coupon.code.toLocaleLowerCase(),
+      );
+      if (!definition || definition.status !== 'enabled') {
+        throw new BadRequestException('Ma khuyen mai khong ton tai hoac da tat');
+      }
+      const now = Date.now();
+      if (
+        (definition.starts_at && new Date(definition.starts_at).getTime() > now) ||
+        (definition.ends_at && new Date(definition.ends_at).getTime() <= now)
+      ) {
+        throw new BadRequestException('Ma khuyen mai chua bat dau hoac da het han');
+      }
+      const subtotal = body.line_items.reduce((sum, item) => {
+        const unitPrice = item.variant_id !== undefined
+          ? variantPricing.get(item.variant_id)?.price ?? Number(item.price ?? 0)
+          : Number(item.price ?? 0);
+        return sum + unitPrice * item.quantity;
+      }, 0);
+      const minimum = Number(definition.minimum_order_amount ?? 0);
+      if (subtotal < minimum) {
+        throw new BadRequestException(
+          `Don hang chua dat gia tri toi thieu ${minimum} de ap dung ma khuyen mai`,
+        );
+      }
+      const value = Number(definition.value ?? 0);
+      const itemCount = body.line_items.reduce((sum, item) => sum + item.quantity, 0);
+      let amount = definition.discount_type === 'percentage'
+        ? Math.round(subtotal * value / 100)
+        : definition.discount_type === 'fixed_amount'
+          ? value * (definition.applies_once === false ? itemCount : 1)
+          : 0;
+      const maximum = Number(definition.max_amount_apply ?? 0);
+      if (maximum > 0) amount = Math.min(amount, maximum);
+      amount = Math.min(Math.max(0, Math.round(amount)), Math.round(subtotal));
+      if (!amount) {
+        throw new BadRequestException('Ma khuyen mai khong tao ra muc giam gia hop le');
+      }
+      discountCodes = body.discount_codes?.map((discount) =>
+        discount === coupon ? { ...discount, amount } : discount,
+      );
+    }
+
+    const customLineDiscount = body.line_items.reduce(
+      (sum, item) => sum + Number(item.total_discount ?? 0),
+      0,
+    );
+    const manualDiscountCode = body.discount_codes?.find(
+      (discount) => !discount.is_coupon_code,
+    );
+    const totalDiscounts = coupon ? 0 : manualDiscountCode?.amount ?? customLineDiscount;
+
+    const response = await this.apiClient.call<{ order?: OrderPayload }>(
+      orgId,
+      'POST',
+      '/orders.json',
+      {
+        order: {
+          ...orderFields,
+          ...(discountCodes ? { discount_codes: discountCodes } : {}),
+          ...(totalDiscounts > 0 ? { total_discounts: totalDiscounts } : {}),
+          financial_status: body.financial_status ?? 'pending',
+          ...(body.financial_status === 'paid'
+            ? { transactions: [{ kind: 'capture' }] }
+            : {}),
+          ...(customer_id ? { customer: { id: customer_id } } : {}),
+          ...(hasAddress
+            ? {
+                shipping_address: {
+                  first_name,
+                  last_name,
+                  address1,
+                  city,
+                  province,
+                  country: country || 'Vietnam',
+                  phone: body.phone,
+                },
+              }
+            : {}),
+        },
+      },
+    );
+    const payload = response.body?.order;
+    if (!payload?.id) {
+      throw new BadRequestException('Haravan khong tra ve thong tin don hang');
+    }
+    // Haravan đôi khi chỉ trả customer.id khi tạo order bằng customer reference.
+    // Giữ snapshot từ khách đã chọn để UI hiển thị đúng mà không cần tạo shipping address.
+    const snapshotFirstName = payload.customer?.first_name ?? first_name;
+    const snapshotLastName = payload.customer?.last_name ?? last_name;
+    const snapshotEmail = payload.customer?.email ?? body.email;
+    const snapshotPhone = payload.customer?.phone ?? body.phone;
+    const customerSnapshot = payload.customer || customer_id || snapshotFirstName || snapshotLastName || snapshotEmail || snapshotPhone
+      ? {
+          ...(payload.customer ?? {}),
+          ...(customer_id ? { id: customer_id } : {}),
+          ...(snapshotFirstName ? { first_name: snapshotFirstName } : {}),
+          ...(snapshotLastName ? { last_name: snapshotLastName } : {}),
+          ...(snapshotEmail ? { email: snapshotEmail } : {}),
+          ...(snapshotPhone ? { phone: snapshotPhone } : {}),
+        }
+      : undefined;
+    const orderPayload: OrderPayload = {
+      ...payload,
+      ...(payload.email ?? body.email ? { email: payload.email ?? body.email } : {}),
+      ...(payload.phone ?? body.phone ? { phone: payload.phone ?? body.phone } : {}),
+      ...(customerSnapshot ? { customer: customerSnapshot } : {}),
+    };
+    const result = await this.upsertOrder(orgId, orderPayload, 'api');
+    return result.order;
+  }
+
   /** Lưu hoặc cập nhật đơn theo shop và ID Haravan. */
   async upsertOrder(
     orgId: number,
@@ -85,16 +294,21 @@ export class OrderService {
       )
       .lean()
       .exec();
-    const effectivePayload = this.mergeOrderPayload(existing?.payload, payload);
+    const effectivePayload = this.mergeOrderPayload(
+      existing?.payload,
+      payload,
+      source === 'api' && Boolean(existing),
+    );
+    const haravanName = payload.name?.trim();
     const orderNumber =
-      payload.order_number ??
-      payload.name ??
-      existing?.orderNumber ??
+      payload.order_number?.trim() ||
+      existing?.orderNumber ||
+      haravanName ||
       String(payload.id);
     const orderName =
-      payload.name ??
-      payload.order_number ??
-      existing?.orderName ??
+      haravanName ||
+      existing?.orderName ||
+      payload.order_number?.trim() ||
       String(payload.id);
     const update: Record<string, unknown> = {
       orderNumber,
@@ -110,7 +324,12 @@ export class OrderService {
       targetField: string,
       value: unknown = effectivePayload[sourceField],
     ) => {
-      if (hasField(sourceField)) update[targetField] = value;
+      if (
+        hasField(sourceField) &&
+        !(source === 'api' && existing && payload[sourceField] == null)
+      ) {
+        update[targetField] = value;
+      }
     };
     const lifecycleFields: Array<keyof OrderPayload> = [
       'status',
@@ -218,28 +437,18 @@ export class OrderService {
   private mergeOrderPayload(
     existing: OrderPayload | undefined,
     incoming: OrderPayload,
+    preserveNulls = false,
   ): OrderPayload {
     return {
-      ...existing,
-      ...incoming,
-      ...(existing?.customer && incoming.customer
-        ? { customer: { ...existing.customer, ...incoming.customer } }
+      ...(preserveNulls ? mergeNonNull(existing, incoming) : { ...existing, ...incoming }),
+      ...(mergeNonNull(existing?.customer, incoming.customer)
+        ? { customer: mergeNonNull(existing?.customer, incoming.customer) }
         : {}),
-      ...(existing?.shipping_address && incoming.shipping_address
-        ? {
-            shipping_address: {
-              ...existing.shipping_address,
-              ...incoming.shipping_address,
-            },
-          }
+      ...(mergeNonNull(existing?.shipping_address, incoming.shipping_address)
+        ? { shipping_address: mergeNonNull(existing?.shipping_address, incoming.shipping_address) }
         : {}),
-      ...(existing?.billing_address && incoming.billing_address
-        ? {
-            billing_address: {
-              ...existing.billing_address,
-              ...incoming.billing_address,
-            },
-          }
+      ...(mergeNonNull(existing?.billing_address, incoming.billing_address)
+        ? { billing_address: mergeNonNull(existing?.billing_address, incoming.billing_address) }
         : {}),
     };
   }
@@ -257,18 +466,21 @@ export class OrderService {
       [c.first_name, c.last_name].filter(Boolean).join(' ').trim() ||
       undefined;
 
-    const patch: Record<string, unknown> = {
-      'customer.email': this.orNull(c.email?.toLowerCase()),
-      'customer.phone': this.orNull(
-        OrderService.normalizePhone(c.phone ?? payload.shipping_address?.phone),
-      ),
-      'customer.totalSpent': this.orNull(c.total_spent),
-      'customer.totalPaid': this.orNull(c.total_paid),
-      'customer.state': this.orNull(c.state),
-      'customer.verifiedEmail': this.orNull(c.verified_email),
-      'customer.lastOrderId': this.orNull(c.last_order_id),
-      'customer.lastOrderName': this.orNull(c.last_order_name),
+    const patch: Record<string, unknown> = {};
+    const setCustomerFieldWhenPresent = (field: string, value: unknown) => {
+      if (value !== undefined && value !== null) patch[`customer.${field}`] = value;
     };
+    setCustomerFieldWhenPresent('email', c.email?.toLowerCase());
+    setCustomerFieldWhenPresent(
+      'phone',
+      OrderService.normalizePhone(c.phone ?? payload.shipping_address?.phone),
+    );
+    setCustomerFieldWhenPresent('totalSpent', c.total_spent);
+    setCustomerFieldWhenPresent('totalPaid', c.total_paid);
+    setCustomerFieldWhenPresent('state', c.state);
+    setCustomerFieldWhenPresent('verifiedEmail', c.verified_email);
+    setCustomerFieldWhenPresent('lastOrderId', c.last_order_id);
+    setCustomerFieldWhenPresent('lastOrderName', c.last_order_name);
     if (includeCreationSnapshot && c.orders_count != null) {
       patch['customer.ordersCount'] = c.orders_count;
     }
@@ -286,10 +498,6 @@ export class OrderService {
     if (fullName) patch['customerName'] = fullName;
 
     return patch;
-  }
-
-  private orNull<T>(value: T | null | undefined): T | null {
-    return value === undefined || value === null ? null : value;
   }
 
   private getHaravanOrderStatus(
@@ -394,18 +602,41 @@ export class OrderService {
       return;
     }
 
-    await this.customerModel.create({
-      ...patch,
-      firstSeenAt: new Date(),
-      orderIds: [payload.id],
-      infoSourceOrderId: payload.id,
-      infoSourceTopic: topic,
-      beOrderCount: 1,
-      beTotalSpent: payload.total_price ?? 0,
-      haravanOrdersCount:
-        isOrderCreatedEvent && c.orders_count != null ? c.orders_count : 0,
-      haravanTotalSpent: c.total_spent ?? 0,
-    });
+    try {
+      await this.customerModel.create({
+        ...patch,
+        firstSeenAt: new Date(),
+        orderIds: [payload.id],
+        infoSourceOrderId: payload.id,
+        infoSourceTopic: topic,
+        beOrderCount: 1,
+        beTotalSpent: payload.total_price ?? 0,
+        haravanOrdersCount:
+          isOrderCreatedEvent && c.orders_count != null ? c.orders_count : 0,
+        haravanTotalSpent: c.total_spent ?? 0,
+      });
+    } catch (error) {
+      if ((error as { code?: number })?.code !== 11000) throw error;
+
+      // Duplicate webhooks can race after both workers pass the initial lookup.
+      const racedCustomer = await this.customerModel
+        .findOne({ orgId, $or: or })
+        .lean()
+        .exec();
+      if (racedCustomer) {
+        await this.customerModel
+          .updateOne(
+            { _id: racedCustomer._id },
+            { $set: patch, $addToSet: { orderIds: payload.id } },
+          )
+          .exec();
+      } else {
+        this.logger.warn(
+          `Bo qua dong bo khach don ${payload.id} do xung dot khoa duy nhat`,
+        );
+      }
+      return;
+    }
 
     this.logger.log(
       `Khach moi ${fullName ?? '(chua co ten)'} / ${

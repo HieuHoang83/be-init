@@ -16,7 +16,11 @@ import { OrderService } from './order.service';
 import { extractOrder } from '../core/webhook-payload.util';
 import { JOB_NAMES } from '../queue/queue.service';
 import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
-import { ConfirmOrderBody, ListOrdersQuery } from './dto/order.dto';
+import {
+  ConfirmOrderBody,
+  CreateOrderBody,
+  ListOrdersQuery,
+} from './dto/order.dto';
 
 function parseFilterList(value?: string): string[] {
   return [...new Set((value ?? '').split(',').filter(Boolean))];
@@ -379,6 +383,15 @@ export class OrderController {
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
   ) {
     return this.orderService.findActions(orgId, haravanOrderId, 200);
+  }
+
+  @Post(':orgId/create')
+  @ApiOperation({ summary: 'Tao don hang tren Haravan' })
+  create(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Body() body: CreateOrderBody,
+  ) {
+    return this.orderService.createOrder(orgId, body);
   }
 
   /** Admin xác nhận đơn thủ công. */

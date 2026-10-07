@@ -31,8 +31,33 @@ export interface ApiResponse<T = unknown> {
 }
 
 interface ErrorBody {
-  errors?: string[];
+  /** Haravan tra `errors` co the la chuoi, mang chuoi hoac object {field: loi}. */
+  errors?: string | string[] | Record<string, unknown>;
   message?: string;
+}
+
+/** Lay noi dung loi tu body loi cua Haravan (khong bi cat chuoi thanh 1 ky tu). */
+function readApiErrorMessage(
+  parsed: ErrorBody | undefined,
+  status: number,
+  fallback: string,
+): string {
+  const errors = parsed?.errors;
+  if (typeof errors === 'string' && errors.trim()) return errors;
+  if (Array.isArray(errors)) {
+    const first = errors.find((item) => typeof item === 'string' && item);
+    if (first) return first;
+  }
+  if (errors && typeof errors === 'object') {
+    const first = Object.values(errors).find(
+      (item) => typeof item === 'string' && item,
+    );
+    if (first) return first as string;
+  }
+  if (typeof parsed?.message === 'string' && parsed.message.trim()) {
+    return parsed.message;
+  }
+  return `${fallback} ${status}`;
 }
 
 /** Lỗi từ Haravan; giữ nguyên mã trạng thái để tầng dịch vụ quyết định có thử lại hay không. */
@@ -238,10 +263,11 @@ export class ApiClient {
       const parsed = safeJson(text) as ErrorBody | undefined;
 
       if (!res.ok) {
-        const message =
-          parsed?.errors?.[0] ??
-          parsed?.message ??
-          `Harovan webhook API tra ${res.status}`;
+        const message = readApiErrorMessage(
+          parsed,
+          res.status,
+          'Harovan webhook API tra',
+        );
         throw new ApiError(res.status, message, parsed ?? text);
       }
 
@@ -291,10 +317,11 @@ export class ApiClient {
         if (!res.ok) {
           const text = await res.text().catch(() => '');
           const parsed = safeJson(text) as ErrorBody | undefined;
-          const message =
-            parsed?.errors?.[0] ??
-            parsed?.message ??
-            `Harovan API tra ${res.status}`;
+          const message = readApiErrorMessage(
+            parsed,
+            res.status,
+            'Harovan API tra',
+          );
 
           lastError = new ApiError(res.status, message, parsed ?? text);
           if (!lastError.retryable || attempt === this.cfg.maxRetries) {
