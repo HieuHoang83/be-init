@@ -1,0 +1,86 @@
+{
+     "statusCode": 200,
+     "message": "",
+     "data": {
+       "customers": [
+         {
+           "id": 1176374348,
+           "first_name": "A",
+           "last_name": "Nguyễn văn",
+           "name": "Nguyễn văn A",
+           "phone": "0898676382",
+           "email": null,
+   
+           "accepts_marketing": true,
+           "verified_email": false,
+           "state": "Disabled",
+   
+           "created_at": "2026-10-06T09:06:11.21Z",
+           "updated_at": "2026-10-06T09:06:16.459Z",
+   
+           "orders_count": 1,
+           "last_order_id": 1850021217,
+           "last_order_name": "#10025",
+           "last_order_date": "2026-10-06T09:06:16.478Z",
+   
+           "total_spent": 0,
+           "total_paid": 0,
+   
+           "note": null,
+           "tags": null,
+           "group_name": null,
+           "birthday": null,
+           "gender": 1,
+   
+           "addresses": [
+             {
+               "id": 10285256075,
+               "name": "Nguyễn văn A",
+               "first_name": "A",
+               "last_name": "Nguyễn văn",
+               "phone": "0898676382",
+   
+               "address1": null,
+               "address2": null,
+               "city": null,
+               "province": null,
+               "district": null,
+               "ward": null,
+   
+               "zip": "70000",
+               "country": "Vietnam",
+               "country_code": "vn",
+   
+               "province_code": null,
+               "district_code": null,
+               "ward_code": null,
+   
+               "company": null,
+               "default": true
+             }
+           ],
+   
+           "default_address": {
+             "id": 10285256075,
+             "name": "Nguyễn văn A",
+             "phone": "0898676382",
+   
+             "address1": null,
+             "address2": null,
+             "city": null,
+             "province": null,
+             "district": null,
+             "ward": null,
+   
+             "zip": "70000",
+             "country": "Vietnam",
+             "country_code": "vn",
+   
+             "province_code": null,
+             "district_code": null,
+             "ward_code": null
+           }
+         }
+       ]
+     }
+   }

@@ -166,7 +166,7 @@ describe('OrderController list confirmation filter', () => {
                 ],
               },
             ],
-            },
+          },
         ],
       },
       1,
@@ -209,7 +209,8 @@ describe('OrderController list confirmation filter', () => {
 
   it('validates only the documented Haravan status filters', () => {
     const validQuery = Object.assign(new ListOrdersQuery(), {
-      financialStatuses: 'pending,paid,partially_paid,refunded,voided,partially_refunded',
+      financialStatuses:
+        'pending,paid,partially_paid,refunded,voided,partially_refunded',
       fulfillmentStatuses: 'unshipped,shipped,partial',
       haravanStatuses: 'open,closed,cancelled',
       status: 'any',

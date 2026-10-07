@@ -15,7 +15,10 @@ export class AccessTokenStore {
   private readonly logger = new Logger(AccessTokenStore.name);
 
   /** Bộ nhớ đệm ánh xạ mã shop sang token. */
-  private readonly cache = new Map<number, { token: string; expiresAt: number }>();
+  private readonly cache = new Map<
+    number,
+    { token: string; expiresAt: number }
+  >();
 
   private readonly envToken: string;
   private readonly envOrgId: number | null;
@@ -43,7 +46,9 @@ export class AccessTokenStore {
     }
 
     this.logger.warn(`Khong tim thay access token cho org ${orgId}`);
-    throw new UnauthorizedException(`Chua cau hinh access token cho shop ${orgId}`);
+    throw new UnauthorizedException(
+      `Chua cau hinh access token cho shop ${orgId}`,
+    );
   }
 
   /** Đọc token do OAuth callback lưu trong collection `shops`. */
@@ -56,7 +61,10 @@ export class AccessTokenStore {
 
     if (!shop?.accessToken) return null;
 
-    if (shop.accessTokenExpiresAt && shop.accessTokenExpiresAt.getTime() <= Date.now()) {
+    if (
+      shop.accessTokenExpiresAt &&
+      shop.accessTokenExpiresAt.getTime() <= Date.now()
+    ) {
       this.logger.warn(
         `Access token cua org ${orgId} da het han, can doi code OAuth lai`,
       );
@@ -80,7 +88,11 @@ export class AccessTokenStore {
           $set: {
             accessToken: token,
             ...(expiresInSec
-              ? { accessTokenExpiresAt: new Date(Date.now() + expiresInSec * 1000) }
+              ? {
+                  accessTokenExpiresAt: new Date(
+                    Date.now() + expiresInSec * 1000,
+                  ),
+                }
               : {}),
             ...(scopes?.length ? { scopes } : {}),
           },

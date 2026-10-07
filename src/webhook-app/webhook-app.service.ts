@@ -91,7 +91,11 @@ export class WebhookAppService {
   /** Lưu các quyền shop đã cấp để kiểm tra và đối chiếu. */
   async upsertScopes(orgId: number, scopes: string[]): Promise<void> {
     await this.model
-      .updateOne({ orgId }, { $set: { scopes }, $setOnInsert: { orgId } }, { upsert: true })
+      .updateOne(
+        { orgId },
+        { $set: { scopes }, $setOnInsert: { orgId } },
+        { upsert: true },
+      )
       .exec();
   }
 
@@ -99,7 +103,12 @@ export class WebhookAppService {
     await this.model
       .updateOne(
         { orgId },
-        { $set: { status: AppWebhookStatus.UNINSTALLED, uninstalledAt: new Date() } },
+        {
+          $set: {
+            status: AppWebhookStatus.UNINSTALLED,
+            uninstalledAt: new Date(),
+          },
+        },
       )
       .exec();
   }

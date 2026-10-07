@@ -16,7 +16,11 @@ import {
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { Public } from '../decorators/customize';
-import { extractOrder, extractOrgId, extractTopic } from '../core/webhook-payload.util';
+import {
+  extractOrder,
+  extractOrgId,
+  extractTopic,
+} from '../core/webhook-payload.util';
 import { HmacRequest } from '../core/webhook-hmac.guard';
 import { HMAC_HEADER } from '../core/webhook-hmac.util';
 import { logWebhookPayload } from '../core/webhook-payload-logger';
@@ -69,12 +73,17 @@ export class WebhookAppController {
   ): Promise<void> {
     if (!verifyToken || !challenge) {
       this.logger.warn('Đăng ký thiếu hub.verify_token hoặc hub.challenge');
-      throw new BadRequestException('Thiếu hub.verify_token hoặc hub.challenge');
+      throw new BadRequestException(
+        'Thiếu hub.verify_token hoặc hub.challenge',
+      );
     }
 
     const orgId = extractOrgId(req.headers, { org_id: orgIdQuery });
 
-    const ok = await this.appService.verifySubscriptionToken(orgId, verifyToken);
+    const ok = await this.appService.verifySubscriptionToken(
+      orgId,
+      verifyToken,
+    );
 
     // Ghi kết quả xác thực nhưng không ghi giá trị token.
     logWebhookPayload({
@@ -86,9 +95,9 @@ export class WebhookAppController {
       status: ok ? 200 : 401,
       headers: {
         'x-haravan-org-id': String(orgId ?? ''),
-        'haravan_hub_mode': mode ?? '',
-        'haravan_hub_verify_token': verifyToken,
-        'haravan_hub_challenge': challenge,
+        haravan_hub_mode: mode ?? '',
+        haravan_hub_verify_token: verifyToken,
+        haravan_hub_challenge: challenge,
       },
       result: {
         outcome: ok ? 'verify_token_khop' : 'verify_token_khong_khop',
@@ -144,7 +153,9 @@ export class WebhookAppController {
     // Vẫn trả 200 khi thiếu dữ liệu để Haravan không gửi lại liên tục.
     if (!orgId || !haravanOrderId) {
       this.logger.warn(
-        `Bỏ qua app webhook: thiếu orgId hoặc mã đơn (topic ${topic}, org ${orgId ?? 'n/a'})`,
+        `Bỏ qua app webhook: thiếu orgId hoặc mã đơn (topic ${topic}, org ${
+          orgId ?? 'n/a'
+        })`,
       );
       logWebhookPayload({
         kind: 'app',
@@ -186,13 +197,19 @@ export class WebhookAppController {
       });
       jobId = job.id;
 
-      await this.webhookService.markStatus(event._id.toString(), WebhookPrivateStatus.QUEUED, {
-        jobId: job.id,
-      });
+      await this.webhookService.markStatus(
+        event._id.toString(),
+        WebhookPrivateStatus.QUEUED,
+        {
+          jobId: job.id,
+        },
+      );
     } catch (error) {
       // Ghi lỗi để kiểm tra thủ công; vẫn trả 200 để Haravan không gửi lại.
       const message = (error as Error).message;
-      this.logger.error(`Không thể đưa đơn ${haravanOrderId} vào hàng đợi: ${message}`);
+      this.logger.error(
+        `Không thể đưa đơn ${haravanOrderId} vào hàng đợi: ${message}`,
+      );
       logWebhookPayload({
         kind: 'app',
         flow: 'event_notification',

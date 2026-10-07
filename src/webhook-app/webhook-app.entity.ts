@@ -36,7 +36,11 @@ export class AppInstallation {
   @Prop({ type: [String], default: [] })
   scopes?: string[];
 
-  @Prop({ type: String, enum: AppWebhookStatus, default: AppWebhookStatus.PENDING })
+  @Prop({
+    type: String,
+    enum: AppWebhookStatus,
+    default: AppWebhookStatus.PENDING,
+  })
   status!: AppWebhookStatus;
 
   @Prop()
@@ -47,7 +51,8 @@ export class AppInstallation {
 }
 export type AppInstallationDocument = HydratedDocument<AppInstallation>;
 
-export const AppInstallationSchema = SchemaFactory.createForClass(AppInstallation);
+export const AppInstallationSchema =
+  SchemaFactory.createForClass(AppInstallation);
 
 AppInstallationSchema.index({ orgId: 1 }, { unique: true });
 

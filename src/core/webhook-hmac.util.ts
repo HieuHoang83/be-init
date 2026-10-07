@@ -11,7 +11,10 @@ export const HMAC_HEADER = 'x-haravan-hmacsha256';
  * PHẢI dùng raw body (byte-for-byte) chứ không phải JSON đã stringify lại,
  * nên Nest phải bật `rawBody: true` ở main.ts.
  */
-export function computeHmac(rawBody: Buffer | string, clientSecret: string): string {
+export function computeHmac(
+  rawBody: Buffer | string,
+  clientSecret: string,
+): string {
   return createHmac('sha256', clientSecret).update(rawBody).digest('base64');
 }
 

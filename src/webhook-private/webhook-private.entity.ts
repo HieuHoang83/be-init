@@ -31,7 +31,12 @@ export class WebhookPrivateEvent {
   @Prop({ default: 0 })
   haravanRetryCount?: number;
 
-  @Prop({ type: String, enum: WebhookPrivateStatus, default: WebhookPrivateStatus.RECEIVED, index: true })
+  @Prop({
+    type: String,
+    enum: WebhookPrivateStatus,
+    default: WebhookPrivateStatus.RECEIVED,
+    index: true,
+  })
   status!: WebhookPrivateStatus;
 
   @Prop() error?: string;
@@ -52,7 +57,8 @@ export class WebhookPrivateEvent {
 }
 export type WebhookPrivateEventDocument = HydratedDocument<WebhookPrivateEvent>;
 
-export const WebhookPrivateEventSchema = SchemaFactory.createForClass(WebhookPrivateEvent);
+export const WebhookPrivateEventSchema =
+  SchemaFactory.createForClass(WebhookPrivateEvent);
 
 WebhookPrivateEventSchema.index({ orgId: 1, createdAt: -1 });
 WebhookPrivateEventSchema.index({ topic: 1, createdAt: -1 });

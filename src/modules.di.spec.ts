@@ -5,6 +5,7 @@ import { mongoConfig } from '../mongo/mongo.config';
 import { appConfig } from './config';
 import { ApiModule } from './api/api.module';
 import { CustomerModule } from './customer/customer.module';
+import { HaravanModule } from './haravan/haravan.module';
 import { OrderModule } from './order/order.module';
 import { QueueModule } from './queue/queue.module';
 import { WebhookPrivateModule } from './webhook-private/webhook-private.module';
@@ -26,6 +27,7 @@ describe('Haravan modules (DI graph)', () => {
         WebhookAppModule,
         OrderModule,
         CustomerModule,
+        HaravanModule,
       ],
     }).compile();
 
@@ -34,7 +36,8 @@ describe('Haravan modules (DI graph)', () => {
 
     const routes = app
       .getHttpAdapter()
-      .getInstance()._router.stack.filter((l: any) => l.route)
+      .getInstance()
+      ._router.stack.filter((l: any) => l.route)
       .map(
         (l: any) =>
           `${Object.keys(l.route.methods)[0].toUpperCase()} ${l.route.path}`,

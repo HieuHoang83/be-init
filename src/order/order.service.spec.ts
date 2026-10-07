@@ -43,11 +43,8 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     })),
     findOne: jest.fn(() => queryMock(null)),
     findOneAndUpdate: jest.fn(
-      (
-        _filter: unknown,
-        _update: unknown,
-        _options: unknown,
-      ) => queryMock(null),
+      (_filter: unknown, _update: unknown, _options: unknown) =>
+        queryMock(null),
     ),
   };
 
@@ -74,9 +71,8 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     findOne: jest.fn(() => ({
       lean: () => queryMock(null),
     })),
-    updateOne: jest.fn(
-      (_filter: unknown, _update: unknown) =>
-        queryMock({ acknowledged: true }),
+    updateOne: jest.fn((_filter: unknown, _update: unknown) =>
+      queryMock({ acknowledged: true }),
     ),
     create: jest.fn(async (doc: unknown) => ({
       _id: 'c1',
@@ -239,19 +235,20 @@ describe('OrderService - evaluateConfirmEligibility', () => {
         customer: { id: 55, email: 'old@example.com', first_name: 'An' },
       };
       orderModel.findOne.mockImplementation(
-        () => ({
-          select: () => ({
-            lean: () =>
-              queryMock({
-                status: OrderStatus.PROCESSING,
-                orderName: '#200',
-                orderNumber: '#200',
-                totalPrice: 300000,
-                financialStatus: 'pending',
-                payload: previousPayload,
-              }),
-          }),
-        }) as never,
+        () =>
+          ({
+            select: () => ({
+              lean: () =>
+                queryMock({
+                  status: OrderStatus.PROCESSING,
+                  orderName: '#200',
+                  orderNumber: '#200',
+                  totalPrice: 300000,
+                  financialStatus: 'pending',
+                  payload: previousPayload,
+                }),
+            }),
+          } as never),
       );
       orderModel.findOneAndUpdate.mockImplementation(
         () => queryMock({ orderName: '#200' }) as never,
@@ -284,21 +281,22 @@ describe('OrderService - evaluateConfirmEligibility', () => {
 
     it('ghi nhận cập nhật trạng thái lifecycle khi webhook gửi cờ hủy', async () => {
       orderModel.findOne.mockImplementation(
-        () => ({
-          select: () => ({
-            lean: () =>
-              queryMock({
-                status: OrderStatus.PROCESSING,
-                orderName: '#201',
-                orderNumber: '#201',
-                payload: {
-                  id: 201,
-                  cancelled_status: 'uncancelled',
-                  closed_status: 'unclosed',
-                },
-              }),
-          }),
-        }) as never,
+        () =>
+          ({
+            select: () => ({
+              lean: () =>
+                queryMock({
+                  status: OrderStatus.PROCESSING,
+                  orderName: '#201',
+                  orderNumber: '#201',
+                  payload: {
+                    id: 201,
+                    cancelled_status: 'uncancelled',
+                    closed_status: 'unclosed',
+                  },
+                }),
+            }),
+          } as never),
       );
       orderModel.findOneAndUpdate.mockImplementation(
         () => queryMock({ orderName: '#201' }) as never,
@@ -336,7 +334,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     it('ghi lai webhook tao don va cac truong nghiep vu thay doi', async () => {
       const savedOrder = { orderName: '#10021' };
       orderModel.findOne.mockImplementation(
-        () => ({ select: () => ({ lean: () => queryMock(null) }) }) as never,
+        () => ({ select: () => ({ lean: () => queryMock(null) }) } as never),
       );
       orderModel.findOneAndUpdate.mockImplementation(
         () => queryMock(savedOrder) as never,
@@ -375,23 +373,26 @@ describe('OrderService - evaluateConfirmEligibility', () => {
 
     it('chỉ ghi các trường nghiệp vụ thay đổi cho webhook cập nhật', async () => {
       orderModel.findOne.mockImplementation(
-        () => ({
-          select: () => ({
-            lean: () =>
-              queryMock({
-                status: OrderStatus.PENDING,
-                orderName: '#10021',
-                orderNumber: '#10021',
-                totalPrice: 150000,
-                subtotalPrice: 150000,
-                totalTax: 0,
-                totalDiscounts: 0,
-                itemCount: 1,
-                lineItems: [{ title: 'Sản phẩm A', quantity: 1, price: 150000 }],
-                payload: { note: 'Ghi chú cũ' },
-              }),
-          }),
-        }) as never,
+        () =>
+          ({
+            select: () => ({
+              lean: () =>
+                queryMock({
+                  status: OrderStatus.PENDING,
+                  orderName: '#10021',
+                  orderNumber: '#10021',
+                  totalPrice: 150000,
+                  subtotalPrice: 150000,
+                  totalTax: 0,
+                  totalDiscounts: 0,
+                  itemCount: 1,
+                  lineItems: [
+                    { title: 'Sản phẩm A', quantity: 1, price: 150000 },
+                  ],
+                  payload: { note: 'Ghi chú cũ' },
+                }),
+            }),
+          } as never),
       );
       orderModel.findOneAndUpdate.mockImplementation(
         () => queryMock({ orderName: '#10021' }) as never,
@@ -415,7 +416,11 @@ describe('OrderService - evaluateConfirmEligibility', () => {
         expect.objectContaining({
           action: 'order_updated',
           source: 'webhook',
-          changedFields: expect.arrayContaining(['totalPrice', 'lineItems', 'note']),
+          changedFields: expect.arrayContaining([
+            'totalPrice',
+            'lineItems',
+            'note',
+          ]),
         }),
       );
       const event = eventModel.create.mock.calls[0][0] as {
@@ -535,7 +540,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
     it('luon cap nhat ho so khach khi xu ly webhook don', async () => {
       const order = buildOrder({ customer: undefined });
       orderModel.findOne.mockImplementation(
-        () => ({ select: () => ({ lean: () => queryMock(null) }) }) as never,
+        () => ({ select: () => ({ lean: () => queryMock(null) }) } as never),
       );
       orderModel.findOneAndUpdate.mockImplementation(
         () => queryMock(order) as never,
@@ -573,19 +578,21 @@ describe('OrderService - evaluateConfirmEligibility', () => {
           priorSpent: 500000,
         },
       });
-      order.toObject = () => ({
-        orderName: '#10015',
-        orderNumber: '#10015',
-        processing: order.processing,
-      }) as never;
+      order.toObject = () =>
+        ({
+          orderName: '#10015',
+          orderNumber: '#10015',
+          processing: order.processing,
+        } as never);
       orderModel.find.mockImplementation(
-        () => ({
-          sort: () => ({
-            skip: () => ({
-              limit: () => queryMock([order]),
+        () =>
+          ({
+            sort: () => ({
+              skip: () => ({
+                limit: () => queryMock([order]),
+              }),
             }),
-          }),
-        }) as never,
+          } as never),
       );
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
@@ -612,18 +619,20 @@ describe('OrderService - evaluateConfirmEligibility', () => {
           priorSpent: 500000,
         },
       });
-      order.toObject = () => ({
-        orderName: '#10015',
-        processing: order.processing,
-      }) as never;
+      order.toObject = () =>
+        ({
+          orderName: '#10015',
+          processing: order.processing,
+        } as never);
       orderModel.find.mockImplementation(
-        () => ({
-          sort: () => ({
-            skip: () => ({
-              limit: () => queryMock([order]),
+        () =>
+          ({
+            sort: () => ({
+              skip: () => ({
+                limit: () => queryMock([order]),
+              }),
             }),
-          }),
-        }) as never,
+          } as never),
       );
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
@@ -649,18 +658,20 @@ describe('OrderService - evaluateConfirmEligibility', () => {
           priorSpent: 0,
         },
       });
-      order.toObject = () => ({
-        orderName: '#10016',
-        processing: order.processing,
-      }) as never;
+      order.toObject = () =>
+        ({
+          orderName: '#10016',
+          processing: order.processing,
+        } as never);
       orderModel.find.mockImplementation(
-        () => ({
-          sort: () => ({
-            skip: () => ({
-              limit: () => queryMock([order]),
+        () =>
+          ({
+            sort: () => ({
+              skip: () => ({
+                limit: () => queryMock([order]),
+              }),
             }),
-          }),
-        }) as never,
+          } as never),
       );
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();

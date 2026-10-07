@@ -38,14 +38,16 @@ export function readWebhookMeta(
   const b = (body ?? {}) as Record<string, unknown>;
 
   const topic =
-    (typeof h['x-haravan-topic'] === 'string' ? h['x-haravan-topic'] : undefined) ??
+    (typeof h['x-haravan-topic'] === 'string'
+      ? h['x-haravan-topic']
+      : undefined) ??
     (typeof b.topic === 'string' ? b.topic : undefined) ??
     'unknown';
 
-  const orgId =
-    toInt(h['x-haravan-org-id']) ?? toInt(b.org_id) ?? null;
+  const orgId = toInt(h['x-haravan-org-id']) ?? toInt(b.org_id) ?? null;
 
-  const orderId = toInt(h['x-haravan-order-id']) ?? toInt((b as OrderPayload).id) ?? null;
+  const orderId =
+    toInt(h['x-haravan-order-id']) ?? toInt((b as OrderPayload).id) ?? null;
 
   const isTest =
     h['x-haravan-test'] === 'true' ||

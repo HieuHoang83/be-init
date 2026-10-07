@@ -115,11 +115,7 @@ export const HARAVAN_FULFILLMENT_FILTERS = [
 export type HaravanFulfillmentFilter =
   typeof HARAVAN_FULFILLMENT_FILTERS[number];
 
-export const HARAVAN_ORDER_STATUSES = [
-  'open',
-  'closed',
-  'cancelled',
-] as const;
+export const HARAVAN_ORDER_STATUSES = ['open', 'closed', 'cancelled'] as const;
 
 export type HaravanOrderStatus = typeof HARAVAN_ORDER_STATUSES[number];
 

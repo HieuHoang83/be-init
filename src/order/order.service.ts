@@ -194,9 +194,15 @@ export class OrderService {
       changedFields,
       description: existing
         ? changedFields.length
-          ? `Cập nhật đơn hàng từ ${source === 'webhook' ? `webhook ${topic ?? ''}` : source}.`
-          : `Nhận ${source === 'webhook' ? `webhook ${topic ?? ''}` : source}; không có trường đơn hàng thay đổi.`
-        : `Tạo đơn hàng từ ${source === 'webhook' ? `webhook ${topic ?? ''}` : source}.`,
+          ? `Cập nhật đơn hàng từ ${
+              source === 'webhook' ? `webhook ${topic ?? ''}` : source
+            }.`
+          : `Nhận ${
+              source === 'webhook' ? `webhook ${topic ?? ''}` : source
+            }; không có trường đơn hàng thay đổi.`
+        : `Tạo đơn hàng từ ${
+            source === 'webhook' ? `webhook ${topic ?? ''}` : source
+          }.`,
     });
 
     this.logger.log(
@@ -309,10 +315,7 @@ export class OrderService {
     ) {
       return 'closed';
     }
-    if (
-      cancelledStatus === 'uncancelled' &&
-      closedStatus === 'unclosed'
-    ) {
+    if (cancelledStatus === 'uncancelled' && closedStatus === 'unclosed') {
       return 'open';
     }
     return null;
@@ -825,15 +828,11 @@ export class OrderService {
           fullName: order.customer?.fullName ?? order.customerName,
         });
         const name =
-          order.orderName ??
-          order.orderNumber ??
-          String(order.haravanOrderId);
+          order.orderName ?? order.orderNumber ?? String(order.haravanOrderId);
         const payloadOrderNumber = Number(order.customer?.ordersCount);
 
         if (typeof processing['isReturningCustomer'] === 'boolean') {
-          const priorOrderCount = Number(
-            processing['priorOrderCount'] ?? 0,
-          );
+          const priorOrderCount = Number(processing['priorOrderCount'] ?? 0);
           return {
             ...doc,
             name,
@@ -843,8 +842,8 @@ export class OrderService {
             customerOrderNumber: !hasCustomerIdentity
               ? null
               : Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
-                ? payloadOrderNumber
-                : priorOrderCount + 1,
+              ? payloadOrderNumber
+              : priorOrderCount + 1,
           };
         }
 
@@ -863,8 +862,8 @@ export class OrderService {
           customerOrderNumber: !hasCustomerIdentity
             ? null
             : Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
-              ? payloadOrderNumber
-              : priorOrderCount + 1,
+            ? payloadOrderNumber
+            : priorOrderCount + 1,
         };
       }),
     );
@@ -984,28 +983,116 @@ export class OrderService {
       string,
       unknown
     >;
-    const fields: Array<{ label: string; current: unknown; previous: unknown }> = [
-      { label: 'status', current: update['status'], previous: existing?.['status'] },
-      { label: 'orderName', current: update['orderName'], previous: existing?.['orderName'] },
-      { label: 'orderNumber', current: update['orderNumber'], previous: existing?.['orderNumber'] },
-      { label: 'customerName', current: update['customerName'], previous: existing?.['customerName'] },
-      { label: 'email', current: update['email'], previous: existing?.['email'] },
-      { label: 'phone', current: update['phone'], previous: existing?.['phone'] },
-      { label: 'financialStatus', current: update['financialStatus'], previous: existing?.['financialStatus'] },
-      { label: 'fulfillmentStatus', current: update['fulfillmentStatus'], previous: existing?.['fulfillmentStatus'] },
-      { label: 'confirmedStatus', current: update['confirmedStatus'], previous: existing?.['confirmedStatus'] },
-      { label: 'haravanStatus', current: update['haravanStatus'], previous: existing?.['haravanStatus'] },
-      { label: 'gateway', current: update['gateway'], previous: existing?.['gateway'] },
-      { label: 'sourceName', current: update['sourceName'], previous: existing?.['sourceName'] },
-      { label: 'totalPrice', current: update['totalPrice'], previous: existing?.['totalPrice'] },
-      { label: 'subtotalPrice', current: update['subtotalPrice'], previous: existing?.['subtotalPrice'] },
-      { label: 'totalTax', current: update['totalTax'], previous: existing?.['totalTax'] },
-      { label: 'totalDiscounts', current: update['totalDiscounts'], previous: existing?.['totalDiscounts'] },
-      { label: 'itemCount', current: update['itemCount'], previous: existing?.['itemCount'] },
-      { label: 'lineItems', current: update['lineItems'], previous: existing?.['lineItems'] },
-      { label: 'shippingAddress', current: update['shippingAddress'], previous: existing?.['shippingAddress'] },
-      { label: 'billingAddress', current: update['billingAddress'], previous: existing?.['billingAddress'] },
-      { label: 'note', current: payload.note, previous: previousPayload['note'] },
+    const fields: Array<{
+      label: string;
+      current: unknown;
+      previous: unknown;
+    }> = [
+      {
+        label: 'status',
+        current: update['status'],
+        previous: existing?.['status'],
+      },
+      {
+        label: 'orderName',
+        current: update['orderName'],
+        previous: existing?.['orderName'],
+      },
+      {
+        label: 'orderNumber',
+        current: update['orderNumber'],
+        previous: existing?.['orderNumber'],
+      },
+      {
+        label: 'customerName',
+        current: update['customerName'],
+        previous: existing?.['customerName'],
+      },
+      {
+        label: 'email',
+        current: update['email'],
+        previous: existing?.['email'],
+      },
+      {
+        label: 'phone',
+        current: update['phone'],
+        previous: existing?.['phone'],
+      },
+      {
+        label: 'financialStatus',
+        current: update['financialStatus'],
+        previous: existing?.['financialStatus'],
+      },
+      {
+        label: 'fulfillmentStatus',
+        current: update['fulfillmentStatus'],
+        previous: existing?.['fulfillmentStatus'],
+      },
+      {
+        label: 'confirmedStatus',
+        current: update['confirmedStatus'],
+        previous: existing?.['confirmedStatus'],
+      },
+      {
+        label: 'haravanStatus',
+        current: update['haravanStatus'],
+        previous: existing?.['haravanStatus'],
+      },
+      {
+        label: 'gateway',
+        current: update['gateway'],
+        previous: existing?.['gateway'],
+      },
+      {
+        label: 'sourceName',
+        current: update['sourceName'],
+        previous: existing?.['sourceName'],
+      },
+      {
+        label: 'totalPrice',
+        current: update['totalPrice'],
+        previous: existing?.['totalPrice'],
+      },
+      {
+        label: 'subtotalPrice',
+        current: update['subtotalPrice'],
+        previous: existing?.['subtotalPrice'],
+      },
+      {
+        label: 'totalTax',
+        current: update['totalTax'],
+        previous: existing?.['totalTax'],
+      },
+      {
+        label: 'totalDiscounts',
+        current: update['totalDiscounts'],
+        previous: existing?.['totalDiscounts'],
+      },
+      {
+        label: 'itemCount',
+        current: update['itemCount'],
+        previous: existing?.['itemCount'],
+      },
+      {
+        label: 'lineItems',
+        current: update['lineItems'],
+        previous: existing?.['lineItems'],
+      },
+      {
+        label: 'shippingAddress',
+        current: update['shippingAddress'],
+        previous: existing?.['shippingAddress'],
+      },
+      {
+        label: 'billingAddress',
+        current: update['billingAddress'],
+        previous: existing?.['billingAddress'],
+      },
+      {
+        label: 'note',
+        current: payload.note,
+        previous: previousPayload['note'],
+      },
       {
         label: 'discount_codes',
         current: payload.discount_codes,

@@ -7,7 +7,7 @@ import { AccessTokenStore } from './access-token.store';
 import { ApiClient } from './api.service';
 
 /**
- * Cung cấp client gọi Omni API để lấy và xác nhận đơn hàng.
+ * Cung cấp client gọi Omni API (đơn hàng, sản phẩm, khách hàng).
  *
  * Đăng ký collection `shops` để AccessTokenStore đọc access token do callback
  * OAuth lưu lại.

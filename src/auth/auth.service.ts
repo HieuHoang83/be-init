@@ -39,7 +39,9 @@ export class AuthService {
 
   // Đăng ký người dùng mới.
   async registerUser(dto: UserRegisterDto) {
-    const existing = await this.userService.findOneByPhone(dto.phone).catch(() => null);
+    const existing = await this.userService
+      .findOneByPhone(dto.phone)
+      .catch(() => null);
     if (existing) {
       throw new BadRequestException('Phone number already registered');
     }

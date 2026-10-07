@@ -77,12 +77,15 @@ export class WebhookOauthController {
       this.logger.warn('Callback khong co tham so `code`');
       return this.reply(res, 400, {
         ok: false,
-        error: 'Thieu tham so `code`. Hay mo link can nhep lai app tu trang Haravan Partner Dashboard.',
+        error:
+          'Thieu tham so `code`. Hay mo link can nhep lai app tu trang Haravan Partner Dashboard.',
       });
     }
 
     if (!configured.clientId || !configured.redirectUri) {
-      this.logger.error('Thieu HARAVAN_CLIENT_ID hoac HARAVAN_REDIRECT_URI trong .env');
+      this.logger.error(
+        'Thieu HARAVAN_CLIENT_ID hoac HARAVAN_REDIRECT_URI trong .env',
+      );
       return this.reply(res, 500, {
         ok: false,
         error: 'Server chua cau hinh HARAVAN_CLIENT_ID / HARAVAN_REDIRECT_URI',
@@ -98,7 +101,9 @@ export class WebhookOauthController {
       const res2 = await this.api.exchangeAuthorizationCode(code);
       const token = res2.body;
 
-      const grantedScopes = (token.scope ?? scope ?? '').split(/\s+/).filter(Boolean);
+      const grantedScopes = (token.scope ?? scope ?? '')
+        .split(/\s+/)
+        .filter(Boolean);
 
       // Lưu vào cơ sở dữ liệu để tiếp tục sử dụng sau khi khởi động lại.
       const orgId = Number(process.env.HARAVAN_ORG_ID) || 0;
@@ -116,7 +121,9 @@ export class WebhookOauthController {
 
       this.logger.log(
         `Doi code thanh cong: token_type=${token.token_type}, ` +
-          `expires_in=${token.expires_in}, scope=${token.scope ?? scope}, luu vao ${savedTo}`,
+          `expires_in=${token.expires_in}, scope=${
+            token.scope ?? scope
+          }, luu vao ${savedTo}`,
       );
 
       const hasWhApi = grantedScopes.includes('wh_api');
@@ -137,7 +144,9 @@ export class WebhookOauthController {
       });
     } catch (e) {
       if (e instanceof ApiError) {
-        this.logger.error(`Doi code that bai (HTTP ${e.statusCode}): ${e.message}`);
+        this.logger.error(
+          `Doi code that bai (HTTP ${e.statusCode}): ${e.message}`,
+        );
         return this.reply(res, 502, {
           ok: false,
           error: e.message,

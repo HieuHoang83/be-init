@@ -79,7 +79,7 @@ export class OrderController {
       const searchConditions: Record<string, unknown>[] = [
         { orderNumber: new RegExp(`^${escapeRegex(search)}`, 'i') },
         { orderName: new RegExp(`^${escapeRegex(search)}`, 'i') },
-        { 'customerName': customerNamePrefixPattern(search) },
+        { customerName: customerNamePrefixPattern(search) },
         { 'customer.fullName': customerNamePrefixPattern(search) },
         { 'customer.firstName': customerNamePrefixPattern(search) },
       ];
@@ -140,8 +140,9 @@ export class OrderController {
     const haravanStatuses = [
       ...(query.status && query.status !== 'any' ? [query.status] : []),
       ...parseFilterList(query.haravanStatuses),
-    ].filter((status, index, statuses) =>
-      status !== 'any' && statuses.indexOf(status) === index,
+    ].filter(
+      (status, index, statuses) =>
+        status !== 'any' && statuses.indexOf(status) === index,
     );
     if (haravanStatuses.length) {
       const haravanStatusAlternatives = haravanStatuses.flatMap((status) => {
@@ -185,14 +186,16 @@ export class OrderController {
         }
         return alternatives;
       });
-      const existingAnd = (filter['$and'] as Record<string, unknown>[] | undefined) ?? [];
+      const existingAnd =
+        (filter['$and'] as Record<string, unknown>[] | undefined) ?? [];
       existingAnd.push({ $or: haravanStatusAlternatives });
       filter['$and'] = existingAnd;
     }
     const customerOrderTypes = parseFilterList(query.customerOrderTypes);
     if (customerOrderTypes.length === 1) {
       const firstOrder = customerOrderTypes[0] === 'first';
-      const existingAnd = (filter['$and'] as Record<string, unknown>[] | undefined) ?? [];
+      const existingAnd =
+        (filter['$and'] as Record<string, unknown>[] | undefined) ?? [];
       filter['$and'] = [
         ...existingAnd,
         {
@@ -230,9 +233,12 @@ export class OrderController {
                 },
                 { email: /^(guest|noreply|no.?reply)([+._-].*)?@/i },
                 {
-                  'customer.fullName': /^(guest\b|khach le\b|khách lẻ\b|walk.?in\b)/i,
+                  'customer.fullName':
+                    /^(guest\b|khach le\b|khách lẻ\b|walk.?in\b)/i,
                 },
-                { customerName: /^(guest\b|khach le\b|khách lẻ\b|walk.?in\b)/i },
+                {
+                  customerName: /^(guest\b|khach le\b|khách lẻ\b|walk.?in\b)/i,
+                },
               ],
             },
           ],
@@ -245,7 +251,12 @@ export class OrderController {
                     $cond: [
                       { $gt: [{ $ifNull: ['$customer.ordersCount', 0] }, 0] },
                       '$customer.ordersCount',
-                      { $add: [{ $ifNull: ['$processing.priorOrderCount', 0] }, 1] },
+                      {
+                        $add: [
+                          { $ifNull: ['$processing.priorOrderCount', 0] },
+                          1,
+                        ],
+                      },
                     ],
                   },
                   1,
@@ -257,7 +268,12 @@ export class OrderController {
                     $cond: [
                       { $gt: [{ $ifNull: ['$customer.ordersCount', 0] }, 0] },
                       '$customer.ordersCount',
-                      { $add: [{ $ifNull: ['$processing.priorOrderCount', 0] }, 1] },
+                      {
+                        $add: [
+                          { $ifNull: ['$processing.priorOrderCount', 0] },
+                          1,
+                        ],
+                      },
                     ],
                   },
                   1,

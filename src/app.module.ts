@@ -10,6 +10,7 @@ import { mongoConfig } from '../mongo/mongo.config';
 import { appConfig } from './config';
 import { ApiModule } from './api/api.module';
 import { CustomerModule } from './customer/customer.module';
+import { HaravanModule } from './haravan/haravan.module';
 import { OrderModule } from './order/order.module';
 import { QueueModule } from './queue/queue.module';
 import { WebhookPrivateModule } from './webhook-private/webhook-private.module';
@@ -33,6 +34,7 @@ import { WebhookAppModule } from './webhook-app/webhook-app.module';
     MongoModule,
     OrderModule,
     CustomerModule,
+    HaravanModule,
     WebhookPrivateModule,
     WebhookAppModule,
     QueueModule,

@@ -247,7 +247,10 @@ export class OrderEvent {
   @Prop({ required: true, enum: OrderEventAction })
   action!: OrderEventAction;
 
-  @Prop({ required: true, enum: ['webhook', 'user', 'system', 'api', 'manual'] })
+  @Prop({
+    required: true,
+    enum: ['webhook', 'user', 'system', 'api', 'manual'],
+  })
   source!: OrderEventSource;
 
   @Prop({ required: true })

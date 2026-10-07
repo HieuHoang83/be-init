@@ -56,7 +56,8 @@ export function logWebhookPayload(data: WebhookLogInput): void {
     ...data,
     raw:
       typeof data.raw === 'string' && data.raw.length > MAX_RAW
-        ? data.raw.slice(0, MAX_RAW) + `...[+${data.raw.length - MAX_RAW} bytes]`
+        ? data.raw.slice(0, MAX_RAW) +
+          `...[+${data.raw.length - MAX_RAW} bytes]`
         : data.raw,
   };
 

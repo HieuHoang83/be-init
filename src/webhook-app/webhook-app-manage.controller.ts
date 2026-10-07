@@ -10,10 +10,7 @@ import {
 /** Lấy org_id từ query hoặc body; nếu thiếu thì dùng org_id trong .env. */
 function resolveOrgId(from: Record<string, unknown> | undefined): number {
   const raw =
-    from?.orgId ??
-    from?.org_id ??
-    process.env.HARAVAN_ORG_ID ??
-    undefined;
+    from?.orgId ?? from?.org_id ?? process.env.HARAVAN_ORG_ID ?? undefined;
 
   const orgId = Number(raw);
   if (!orgId) {

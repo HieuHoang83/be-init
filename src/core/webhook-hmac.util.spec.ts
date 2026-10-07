@@ -32,7 +32,9 @@ describe('computeHmac', () => {
 });
 
 describe('verifyHmac', () => {
-  const raw = Buffer.from(JSON.stringify({ org_id: 1, topic: 'orders/create' }));
+  const raw = Buffer.from(
+    JSON.stringify({ org_id: 1, topic: 'orders/create' }),
+  );
   const secret = 'my-client-secret';
 
   it('accept chuoi dung', () => {
@@ -46,7 +48,9 @@ describe('verifyHmac', () => {
   });
 
   it('reject khi sai signature', () => {
-    expect(verifyHmac(raw, secret, computeHmac(raw, 'other-secret'))).toBe(false);
+    expect(verifyHmac(raw, secret, computeHmac(raw, 'other-secret'))).toBe(
+      false,
+    );
   });
 
   it('reject khi body bi sua', () => {

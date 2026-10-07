@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { verifyHmac, HMAC_HEADER } from './webhook-hmac.util';
 import { readWebhookMeta } from './webhook-payload.util';
@@ -54,8 +59,8 @@ export abstract class HmacGuard implements CanActivate {
           status !== 200
             ? 'hmac_rejected'
             : req.query && (req.query['hub.challenge'] || req.query['code'])
-              ? 'verify_token'
-              : 'event_notification',
+            ? 'verify_token'
+            : 'event_notification',
         method: req.method,
         path: req.originalUrl ?? req.url ?? null,
         topic,

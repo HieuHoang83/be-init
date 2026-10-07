@@ -26,91 +26,131 @@ function csvListPattern(values: readonly string[]) {
 }
 
 export class ListOrdersQuery {
-  @IsOptional() @Type(() => Number) @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   orgId?: number;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   email?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   orderNumber?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   search?: string;
 
-  @IsOptional() @IsIn([...HARAVAN_ORDER_STATUSES, 'any'])
+  @IsOptional()
+  @IsIn([...HARAVAN_ORDER_STATUSES, 'any'])
   status?: HaravanOrderStatus | 'any';
 
-  @IsOptional() @IsIn(HARAVAN_FINANCIAL_FILTERS)
+  @IsOptional()
+  @IsIn(HARAVAN_FINANCIAL_FILTERS)
   financialStatus?: FinancialStatus;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   @Matches(csvListPattern(HARAVAN_FINANCIAL_FILTERS))
   financialStatuses?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   @Matches(csvListPattern(HARAVAN_FULFILLMENT_FILTERS))
   fulfillmentStatuses?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   @Matches(csvListPattern(HARAVAN_ORDER_STATUSES))
   haravanStatuses?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   @Matches(csvListPattern(['first', 'repeat']))
   customerOrderTypes?: string;
 
-  @IsOptional() @IsIn(['confirmed', 'unconfirmed'])
+  @IsOptional()
+  @IsIn(['confirmed', 'unconfirmed'])
   confirmedStatus?: string;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   @Matches(/^(confirmed|unconfirmed)(,(confirmed|unconfirmed))*$/)
   confirmedStatuses?: string;
 
-  @IsOptional() @IsDateString()
+  @IsOptional()
+  @IsDateString()
   createdFrom?: string;
 
-  @IsOptional() @IsDateString()
+  @IsOptional()
+  @IsDateString()
   createdTo?: string;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number;
 }
 
 export class ListWebhookEventsQuery {
-  @IsOptional() @Type(() => Number) @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   orgId?: number;
 
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   topic?: string;
 
-  @IsOptional() @IsIn(Object.values(WebhookPrivateStatus))
+  @IsOptional()
+  @IsIn(Object.values(WebhookPrivateStatus))
   status?: WebhookPrivateStatus;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
   page?: number;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100)
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number;
 }
 
 export class ConfirmOrderBody {
   /** Người thực hiện. */
-  @IsOptional() @IsString()
+  @IsOptional()
+  @IsString()
   actor?: string;
 
   /** Bỏ qua rule khi xác nhận thủ công. */
-  @IsOptional() @Type(() => Boolean) @IsBoolean()
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
   force?: boolean;
 }
 
 export class GetOrderStatsQuery {
-  @IsOptional() @Type(() => Number) @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   orgId?: number;
 
-  @IsOptional() @Type(() => Number) @IsNumber()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
   minTotalPrice?: number;
 }

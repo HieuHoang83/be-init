@@ -14,8 +14,7 @@ import { Public } from './decorators/customize';
 export class AppController {
   constructor(
     private readonly appService: AppService,
-    private configService: ConfigService,
-    // private readonly authservice: AuthService,
+    private configService: ConfigService, // private readonly authservice: AuthService,
   ) {}
 
   // Đặt tuyến đăng nhập ở chế độ công khai để không yêu cầu token.

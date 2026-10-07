@@ -66,7 +66,8 @@ export class ApiClient {
   private readonly cfg: ConfigType<typeof appConfig>['api'];
 
   constructor(
-    @Inject(appConfig.KEY) private readonly config: ConfigType<typeof appConfig>,
+    @Inject(appConfig.KEY)
+    private readonly config: ConfigType<typeof appConfig>,
     private readonly tokenStore: AccessTokenStore,
   ) {
     this.cfg = config.api;
@@ -80,7 +81,13 @@ export class ApiClient {
     orgId: number,
     params: Record<string, string | number> = {},
   ): Promise<ApiResponse<unknown>> {
-    return this.request<unknown>(orgId, 'GET', '/orders.json', undefined, params);
+    return this.request<unknown>(
+      orgId,
+      'GET',
+      '/orders.json',
+      undefined,
+      params,
+    );
   }
 
   /**
@@ -88,9 +95,28 @@ export class ApiClient {
    * Nội dung gửi đi: { confirmed_status: 'confirmed' }.
    */
   confirmOrder(orgId: number, orderId: number): Promise<ApiResponse<unknown>> {
-    return this.request<unknown>(orgId, 'POST', `/orders/${orderId}/confirm.json`, {
-      confirmed_status: 'confirmed',
-    });
+    return this.request<unknown>(
+      orgId,
+      'POST',
+      `/orders/${orderId}/confirm.json`,
+      {
+        confirmed_status: 'confirmed',
+      },
+    );
+  }
+
+  /**
+   * Gọi Omni API tùy ý (`/com/{path}`). Dùng cho Product, Customer và resource
+   * khác theo tài liệu Haravan.
+   */
+  call<T = unknown>(
+    orgId: number,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    path: string,
+    body?: Record<string, unknown>,
+    params?: Record<string, string | number>,
+  ): Promise<ApiResponse<T>> {
+    return this.request<T>(orgId, method, path, body, params);
   }
 
   /**
@@ -98,12 +124,16 @@ export class ApiClient {
    * API này dùng máy chủ riêng và xác thực bằng `Authorization: Bearer`,
    * không dùng header `haravan-access-token` như Omni API.
    */
-  subscribeWebhook(orgId: number): Promise<ApiResponse<WebhookSubscribeResponse>> {
+  subscribeWebhook(
+    orgId: number,
+  ): Promise<ApiResponse<WebhookSubscribeResponse>> {
     return this.requestWebhookApi<WebhookSubscribeResponse>(orgId, 'POST');
   }
 
   /** Bước 7: hủy đăng ký webhook. */
-  unsubscribeWebhook(orgId: number): Promise<ApiResponse<WebhookSubscribeResponse>> {
+  unsubscribeWebhook(
+    orgId: number,
+  ): Promise<ApiResponse<WebhookSubscribeResponse>> {
     return this.requestWebhookApi<WebhookSubscribeResponse>(orgId, 'DELETE');
   }
 
@@ -156,11 +186,18 @@ export class ApiClient {
     const text = await res.text();
     const durationMs = Date.now() - startedAt;
 
-    let json: OAuthTokenResponse & { error?: string; error_description?: string };
+    let json: OAuthTokenResponse & {
+      error?: string;
+      error_description?: string;
+    };
     try {
       json = JSON.parse(text);
     } catch {
-      throw new ApiError(res.status, 'Response tu /connect/token khong phai JSON', text);
+      throw new ApiError(
+        res.status,
+        'Response tu /connect/token khong phai JSON',
+        text,
+      );
     }
 
     if (!res.ok || json.error || !json.access_token) {
