@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Public } from '../decorators/customize';
-import { TOPICS } from '../interface/order.interface';
+import { ORDER_TOPIC_SET } from '../interface/order.interface';
 import { extractOrder, readWebhookMeta } from '../core/webhook-payload.util';
 import { HmacRequest } from '../core/webhook-hmac.guard';
 import { HMAC_HEADER } from '../core/webhook-hmac.util';
@@ -21,12 +21,6 @@ import { WebhookPrivateStatus } from './webhook-private.entity';
 import { WebhookPrivateService } from './webhook-private.service';
 
 /** Chỉ xử lý tiếp các chủ đề liên quan đến đơn hàng. */
-const TOPICS_TO_PROCESS = new Set<string>([
-  TOPICS.ORDER_CREATE,
-  TOPICS.ORDER_UPDATE,
-  TOPICS.ORDER_PAID,
-]);
-
 /** Chỉ lưu các header cần kiểm tra; không lưu secret. */
 function pickHeaders(headers: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -145,7 +139,7 @@ export class WebhookPrivateController {
       return { received: true, eventId, status: 'invalid_payload' };
     }
 
-    if (!TOPICS_TO_PROCESS.has(topic)) {
+    if (!ORDER_TOPIC_SET.has(topic)) {
       await this.webhookService.markStatus(
         eventId,
         WebhookPrivateStatus.IGNORED,

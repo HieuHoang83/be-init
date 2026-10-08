@@ -172,8 +172,9 @@ export interface WebhookEnvelope {
 
 export const TOPICS = {
   ORDER_CREATE: 'orders/create',
-  ORDER_UPDATE: 'orders/update',
-  ORDER_CANCEL: 'orders/cancel',
+  ORDER_UPDATE: 'orders/updated',
+  ORDER_CANCEL: 'orders/cancelled',
+  ORDER_FULFILLED: 'orders/fulfilled',
   ORDER_PAID: 'orders/paid',
   CUSTOMER_CREATE: 'customers/create',
   CUSTOMER_UPDATE: 'customers/update',
@@ -182,6 +183,21 @@ export const TOPICS = {
 } as const;
 
 export type Topic = typeof TOPICS[keyof typeof TOPICS];
+
+/**
+ * Chỉ các chủ đề webhook liên quan tới đơn hàng.
+ *
+ * Bắt buộc phải lọc TRƯỚC khi đọc body làm đơn hàng: các topic như
+ * `customers/update` cũng có trường `id`, nhưng đó là ID khách hàng —
+ * nếu không lọc, chúng sẽ bị lưu thành đơn rác.
+ */
+export const ORDER_TOPIC_SET: ReadonlySet<string> = new Set<string>([
+  TOPICS.ORDER_CREATE,
+  TOPICS.ORDER_UPDATE,
+  TOPICS.ORDER_PAID,
+  TOPICS.ORDER_CANCEL,
+  TOPICS.ORDER_FULFILLED,
+]);
 
 export interface ChallengeQuery {
   'hub.mode'?: string;

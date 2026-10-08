@@ -124,9 +124,29 @@ export class WebhookPrivateService {
         (event.headers ?? {}) as Record<string, unknown>,
         event.payload,
       );
-      return order.id === haravanOrderId ? order : null;
+      if (order.id !== haravanOrderId) return null;
+
+      // Body co the rong; `extractOrder` khi do dung skeleton `{ id }` tu header.
+      // Phai tra null de worker fallback goi Haravan API, neu khong se luu don
+      // khong co san pham / tong tien.
+      if (!WebhookPrivateService.hasOrderData(order as Record<string, unknown>)) {
+        return null;
+      }
+
+      return order;
     } catch {
       return null;
     }
+  }
+
+  /** Payload co thuc su chua du lieu don hang, hay chi la skeleton `{ id }`. */
+  private static hasOrderData(order: Record<string, unknown>): boolean {
+    return (
+      Array.isArray(order.line_items) ||
+      order.financial_status !== undefined ||
+      order.fulfillment_status !== undefined ||
+      order.confirmed_status !== undefined ||
+      order.total_price !== undefined
+    );
   }
 }

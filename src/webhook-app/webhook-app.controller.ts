@@ -19,8 +19,9 @@ import { Public } from '../decorators/customize';
 import {
   extractOrder,
   extractOrgId,
-  extractTopic,
+  readWebhookMeta,
 } from '../core/webhook-payload.util';
+import { ORDER_TOPIC_SET } from '../interface/order.interface';
 import { HmacRequest } from '../core/webhook-hmac.guard';
 import { HMAC_HEADER } from '../core/webhook-hmac.util';
 import { logWebhookPayload } from '../core/webhook-payload-logger';
@@ -141,12 +142,74 @@ export class WebhookAppController {
     queued?: boolean;
     jobId?: string;
   }> {
-    const topic = extractTopic(headers, envelope);
-    const orgId = extractOrgId(headers, envelope);
+    const meta = readWebhookMeta(headers, envelope);
+    const topic = meta.topic;
+    const orgId = meta.orgId;
     const picked = pickHeaders(headers);
 
+    // Payload kiểm tra của Haravan không phải đơn hàng thật.
+    if (meta.isTest) {
+      this.logger.log(`Bo qua payload test cho topic ${topic}`);
+      logWebhookPayload({
+        kind: 'app',
+        flow: 'event_notification',
+        method: req.method,
+        path: req.originalUrl ?? null,
+        stage: 'processed',
+        topic,
+        orgId,
+        status: 200,
+        result: {
+          outcome: 'bo_qua_payload_test',
+          note: 'X-Haravan-Test: khong phai don hang that',
+          headers: picked,
+        },
+      });
+      return { received: true, topic, orgId, queued: false };
+    }
+
+    // Chỉ xử lý chủ đề đơn hàng. Các topic khác (customers/*, shop/*) có
+    // trường `id` riêng nên tuyệt đối không được coi là đơn hàng.
+    if (!ORDER_TOPIC_SET.has(topic)) {
+      this.logger.log(`Bo qua topic "${topic}" kiem tra don hang`);
+      logWebhookPayload({
+        kind: 'app',
+        flow: 'event_notification',
+        method: req.method,
+        path: req.originalUrl ?? null,
+        stage: 'processed',
+        topic,
+        orgId,
+        status: 200,
+        result: {
+          outcome: 'bo_qua_topic_khong_lien_quan',
+          note: `Topic ${topic} khong phai su kien don hang`,
+          headers: picked,
+        },
+      });
+      return { received: true, topic, orgId, queued: false };
+    }
+
     // Hỗ trợ body dạng order trực tiếp, { data } hoặc { data: { order } }.
-    const parsed = extractOrder(headers, envelope);
+    let parsed: ReturnType<typeof extractOrder>;
+    try {
+      parsed = extractOrder(headers, envelope);
+    } catch (extractError) {
+      const message = (extractError as Error).message;
+      this.logger.warn(`Bo qua app webhook: ${message}`);
+      logWebhookPayload({
+        kind: 'app',
+        flow: 'event_notification',
+        method: req.method,
+        path: req.originalUrl ?? null,
+        stage: 'processed',
+        topic,
+        orgId,
+        status: 200,
+        result: { outcome: 'payload_khong_hop_le', note: message, headers: picked },
+      });
+      return { received: true, topic, orgId, queued: false };
+    }
     const order = parsed.order as unknown as Record<string, unknown> | null;
     const haravanOrderId = Number(order?.id);
 

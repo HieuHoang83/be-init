@@ -19,6 +19,8 @@ export enum SkipReason {
   INVALID_PAYMENT = 'invalid_payment',
   ORDER_CANCELLED = 'order_cancelled',
   CONFIRM_ERROR = 'confirm_error',
+  SECOND_ORDER_CHECK_DISABLED = 'second_order_check_disabled',
+  FIRST_ORDER = 'first_order',
 }
 
 /** Trạng thái xử lý đơn trong BE. */
@@ -80,6 +82,10 @@ export class Order {
 
   @Prop({ required: true, index: true })
   haravanOrderId!: number;
+
+  /** True when the order/create webhook reports customer.orders_count > 1. */
+  @Prop({ default: false, index: true })
+  is_repeat_order!: boolean;
 
   @Prop({ index: true })
   orderNumber?: string;
@@ -170,6 +176,21 @@ export enum ActionType {
   CONFIRM_SEND = 'confirm_send',
   CONFIRM_SUCCESS = 'confirm_success',
   CONFIRM_FAILED = 'confirm_failed',
+  CANCEL_SEND = 'cancel_send',
+  CANCEL_SUCCESS = 'cancel_success',
+  CANCEL_FAILED = 'cancel_failed',
+  CLOSE_SEND = 'close_send',
+  CLOSE_SUCCESS = 'close_success',
+  CLOSE_FAILED = 'close_failed',
+  OPEN_SEND = 'open_send',
+  OPEN_SUCCESS = 'open_success',
+  OPEN_FAILED = 'open_failed',
+  UPDATE_SEND = 'update_send',
+  UPDATE_SUCCESS = 'update_success',
+  UPDATE_FAILED = 'update_failed',
+  REFUND_SEND = 'refund_send',
+  REFUND_SUCCESS = 'refund_success',
+  REFUND_FAILED = 'refund_failed',
   REPLAY = 'replay',
 }
 
@@ -231,6 +252,10 @@ export enum OrderEventAction {
   CONFIRMED = 'order_confirmed',
   CONFIRM_REQUESTED = 'order_confirm_requested',
   CONFIRM_FAILED = 'order_confirm_failed',
+  CANCELLED = 'order_cancelled',
+  CLOSED = 'order_closed',
+  OPENED = 'order_opened',
+  REFUNDED = 'order_refunded',
 }
 
 export type OrderEventSource = 'webhook' | 'user' | 'system' | 'api' | 'manual';

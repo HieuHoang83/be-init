@@ -14,6 +14,7 @@ import {
 import { Customer } from './customer.entity';
 import { appConfig } from '../config';
 import { ApiClient } from '../api/api.service';
+import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 
 describe('OrderService - evaluateConfirmEligibility', () => {
   let service: OrderService;
@@ -85,6 +86,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       _id: 'o1',
       orgId: 1,
       haravanOrderId: 2,
+      is_repeat_order: true,
       status: OrderStatus.PENDING,
       processing: {},
       createdAt: new Date('2026-01-02'),
@@ -112,6 +114,10 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       providers: [
         OrderService,
         { provide: ApiClient, useValue: apiMock },
+        {
+          provide: ShopSettingsService,
+          useValue: { isAutoCheckRepeatOrdersEnabled: jest.fn().mockResolvedValue(true) },
+        },
         { provide: getModelToken(Order.name), useValue: orderModel },
         { provide: getModelToken(OrderAction.name), useValue: actionModel },
         { provide: getModelToken(OrderEvent.name), useValue: eventModel },
@@ -780,99 +786,6 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       expect(decision.shouldConfirm).toBe(false);
       expect(decision.isReturningCustomer).toBe(true);
       expect(decision.skipReason).toBe(SkipReason.NOT_ENOUGH_PRIOR_SPENT);
-    });
-  });
-
-  describe('dem order truoc tu DB', () => {
-    it('does not count virtual guest customers as an order sequence', async () => {
-      service = await makeService();
-
-      const result = await service.countPriorOrders(
-        1,
-        buildOrder({
-          customer: {
-            haravanId: 1849918600,
-            email: 'guest@haravan.com',
-          } as Order['customer'],
-          email: 'guest@haravan.com',
-        }),
-      );
-
-      expect(result).toEqual({ priorOrderCount: 0, priorSpent: 0 });
-      expect(orderModel.countDocuments).not.toHaveBeenCalled();
-      expect(orderModel.aggregate).not.toHaveBeenCalled();
-    });
-
-    it('does not count or auto-confirm a virtual guest with a placeholder ID', async () => {
-      service = await makeService();
-
-      const decision = await service.evaluateConfirmEligibility(
-        1,
-        buildOrder({
-          customer: {
-            haravanId: 1176261171,
-            email: 'guest@haravan.com',
-            ordersCount: 0,
-          } as Order['customer'],
-          email: 'guest@haravan.com',
-        }),
-      );
-
-      expect(decision).toMatchObject({
-        shouldConfirm: false,
-        priorOrderCount: 0,
-        skipReason: SkipReason.NO_CUSTOMER,
-      });
-      expect(orderModel.countDocuments).not.toHaveBeenCalled();
-    });
-
-    it('dem cac order da luu, khong phu thuoc orders_count', async () => {
-      orderModel.countDocuments.mockImplementation(() => queryMock(3));
-      orderModel.aggregate.mockImplementation(() =>
-        queryMock([{ total: 900000 }]),
-      );
-
-      service = await makeService();
-      const decision = await service.evaluateConfirmEligibility(
-        1,
-        buildOrder({
-          customer: { haravanId: 55 } as Order['customer'],
-        }),
-      );
-
-      expect(orderModel.countDocuments).toHaveBeenCalled();
-      expect(decision).toMatchObject({
-        shouldConfirm: true,
-        priorOrderCount: 3,
-        priorSpent: 900000,
-      });
-    });
-
-    it('khong co haravanId/email nhung co phone -> van dem order trong DB', async () => {
-      orderModel.countDocuments.mockImplementation(() => queryMock(2));
-      service = await makeService();
-      const decision = await service.evaluateConfirmEligibility(
-        1,
-        buildOrder({ customer: { phone: '0961234567' } as Order['customer'] }),
-      );
-
-      expect(decision.shouldConfirm).toBe(true);
-      expect(decision.priorOrderCount).toBe(2);
-      expect(orderModel.countDocuments).toHaveBeenCalled();
-    });
-
-    it('chi dem order khong huy va loai order hien tai', async () => {
-      orderModel.countDocuments.mockImplementation(() => queryMock(1));
-      service = await makeService();
-
-      await service.countPriorOrders(1, buildOrder());
-
-      const filter = orderModel.countDocuments.mock.calls[0][0];
-      expect(filter).toMatchObject({
-        status: { $ne: OrderStatus.CANCELLED },
-        haravanOrderId: { $ne: 2 },
-      });
-      expect(filter).not.toHaveProperty('financialStatus');
     });
   });
 

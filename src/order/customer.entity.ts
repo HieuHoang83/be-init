@@ -68,6 +68,22 @@ CustomerSchema.index(
   { orgId: 1, haravanCustomerId: 1 },
   { sparse: true, unique: true },
 );
-CustomerSchema.index({ orgId: 1, phone: 1 }, { sparse: true, unique: true });
-CustomerSchema.index({ orgId: 1, email: 1 }, { sparse: true, unique: true });
+// Dùng partial index thay cho `sparse`: `sparse` chỉ bỏ qua document thiếu
+// field, nhưng bỏ qua field = null. Khách đặt hàng không có email/điện thoại sẽ
+// ghi `email: null`, khiến E11000 duplicate key (orgId + null) và job chết.
+// partialFilterExpression giữ được tính duy nhất cho giá trị thật.
+CustomerSchema.index(
+  { orgId: 1, phone: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { phone: { $type: 'string' } },
+  },
+);
+CustomerSchema.index(
+  { orgId: 1, email: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { email: { $type: 'string' } },
+  },
+);
 CustomerSchema.index({ orgId: 1, lastSeenAt: -1 });

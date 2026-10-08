@@ -308,3 +308,154 @@ export class GetOrderStatsQuery {
   @IsNumber()
   minTotalPrice?: number;
 }
+
+/** Người thực hiện thao tác thủ công trên UI. */
+export class ActorBody {
+  @IsOptional()
+  @IsString()
+  actor?: string;
+}
+
+/**
+ * Huỷ đơn. Theo tài liệu Haravan, `amount` là số tiền hoàn lại (bỏ trống = hoàn toàn bộ).
+ * `refund` chỉ ghi nhận hoàn tiền khi đơn đã capture; COD thì tiền không thực trả.
+ */
+export class CancelOrderBody {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  refund?: boolean;
+
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  restock?: boolean;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  /** Giữ nguyên trạng thái giao hàng thay vì tự động gỡ fulfillment. */
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  ignore_cancel_fulfillment?: boolean;
+
+  @IsOptional()
+  @IsString()
+  actor?: string;
+}
+
+export class CloseOrderBody {
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsString()
+  actor?: string;
+}
+
+export class OpenOrderBody {
+  @IsOptional()
+  @IsString()
+  actor?: string;
+}
+
+/**
+ * Cập nhật đơn. Haravan KHÔNG cho sửa line_items / số lượng / financial_status,
+ * nên DTO này chỉ mở các trường an toàn.
+ */
+export class UpdateOrderBody {
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => CreateOrderNoteAttribute)
+  note_attributes?: CreateOrderNoteAttribute[];
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  actor?: string;
+}
+
+export class RefundTransactionInput {
+  @IsIn(['refund'])
+  kind!: 'refund';
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(1)
+  amount!: number;
+
+  @IsOptional()
+  @IsString()
+  gateway?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  /** Tham chiếu giao dịch capture gốc khi hoàn một phần. */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  parent_id?: number;
+}
+
+export class CreateRefundBody {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RefundTransactionInput)
+  transactions?: RefundTransactionInput[];
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+
+  @IsOptional()
+  @IsString()
+  actor?: string;
+}
+
+export class ListRefundsQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+}

@@ -71,6 +71,10 @@ export class Shop {
   @Prop()
   ownerEmail?: string;
 
+  /** Enable checks for every repeat order in this organization. */
+  @Prop({ default: true })
+  auto_check_repeat_orders!: boolean;
+
   @Prop()
   apiKey?: string;
 

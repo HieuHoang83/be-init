@@ -16,6 +16,7 @@ import { OrderModule } from './order/order.module';
 import { QueueModule } from './queue/queue.module';
 import { WebhookPrivateModule } from './webhook-private/webhook-private.module';
 import { WebhookAppModule } from './webhook-app/webhook-app.module';
+import { ShopSettingsModule } from './shop-settings/shop-settings.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { WebhookAppModule } from './webhook-app/webhook-app.module';
     AuthModule,
     MongoModule,
     OrderModule,
+    ShopSettingsModule,
     CustomerModule,
     HaravanCoreModule,
     DiscountModule,

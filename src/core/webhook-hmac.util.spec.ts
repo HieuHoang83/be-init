@@ -78,7 +78,11 @@ describe('verifyHmac', () => {
 describe('types / envelope', () => {
   it('topic chuan khai bao', () => {
     expect(TOPICS.ORDER_CREATE).toBe('orders/create');
-    expect(TOPICS.ORDER_UPDATE).toBe('orders/update');
+    // Gia tri nay phai khop voi topic Haravan that su gui.
+    // Da xac nhan tren du lieu webhook thuc te trong Mongo.
+    expect(TOPICS.ORDER_UPDATE).toBe('orders/updated');
+    expect(TOPICS.ORDER_CANCEL).toBe('orders/cancelled');
+    expect(TOPICS.ORDER_FULFILLED).toBe('orders/fulfilled');
     expect(TOPICS.ORDER_PAID).toBe('orders/paid');
   });
 

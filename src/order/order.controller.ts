@@ -7,6 +7,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Put,
   Query,
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
@@ -17,9 +18,15 @@ import { extractOrder } from '../core/webhook-payload.util';
 import { JOB_NAMES } from '../queue/queue.service';
 import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
 import {
+  CancelOrderBody,
+  CloseOrderBody,
   ConfirmOrderBody,
+  CreateRefundBody,
   CreateOrderBody,
+  ListRefundsQuery,
   ListOrdersQuery,
+  OpenOrderBody,
+  UpdateOrderBody,
 } from './dto/order.dto';
 
 function parseFilterList(value?: string): string[] {
@@ -423,6 +430,159 @@ export class OrderController {
   }
 
   /** Chạy lại webhook lỗi. */
+  /** Admin huỷ đơn, tuỳ chọn hoàn tiền / hoàn tồn kho. */
+  @Post(':orgId/:haravanOrderId/cancel')
+  @ApiOperation({ summary: 'Huy don hang tren Haravan' })
+  async cancel(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Body() body: CancelOrderBody,
+    @User() user?: { id?: number; email?: string },
+  ) {
+    const order = await this.orderService.cancelOrder({
+      orgId,
+      haravanOrderId,
+      actor: body?.actor ?? user?.email ?? 'admin',
+      amount: body?.amount,
+      email: body?.email,
+      reason: body?.reason,
+      refund: body?.refund,
+      restock: body?.restock,
+      note: body?.note,
+      ignoreCancelFulfillment: body?.ignore_cancel_fulfillment,
+    });
+    return { cancelled: true, order };
+  }
+
+  /** Đóng đơn. */
+  @Post(':orgId/:haravanOrderId/close')
+  @ApiOperation({ summary: 'Dong don hang' })
+  async close(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Body() body: CloseOrderBody,
+    @User() user?: { id?: number; email?: string },
+  ) {
+    const order = await this.orderService.closeOrder({
+      orgId,
+      haravanOrderId,
+      actor: body?.actor ?? user?.email ?? 'admin',
+      note: body?.note,
+    });
+    return { closed: true, order };
+  }
+
+  /** Mở lại đơn đã đóng. */
+  @Post(':orgId/:haravanOrderId/open')
+  @ApiOperation({ summary: 'Mo lai don hang' })
+  async open(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Body() body: OpenOrderBody,
+    @User() user?: { id?: number; email?: string },
+  ) {
+    const order = await this.orderService.openOrder({
+      orgId,
+      haravanOrderId,
+      actor: body?.actor ?? user?.email ?? 'admin',
+    });
+    return { opened: true, order };
+  }
+
+  /** Cập nhật thông tin đơn (không đổi line_items / financial_status). */
+  @Put(':orgId/:haravanOrderId')
+  @ApiOperation({ summary: 'Cap nhat don hang' })
+  async update(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Body() body: UpdateOrderBody,
+    @User() user?: { id?: number; email?: string },
+  ) {
+    const order = await this.orderService.updateOrder({
+      orgId,
+      haravanOrderId,
+      actor: body?.actor ?? user?.email ?? 'admin',
+      note: body?.note,
+      noteAttributes: body?.note_attributes,
+      email: body?.email,
+      phone: body?.phone,
+    });
+    return { updated: true, order };
+  }
+
+  /** Lịch sử hoàn tiền của đơn. */
+  @Get(':orgId/:haravanOrderId/refunds')
+  @ApiOperation({ summary: 'Danh sach giao dich hoan tien' })
+  listRefunds(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Query() query: ListRefundsQuery,
+  ) {
+    return this.orderService.listRefunds(
+      orgId,
+      haravanOrderId,
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
+  }
+
+  /** Chi tiết một giao dịch hoàn tiền. */
+  @Get(':orgId/:haravanOrderId/refunds/:refundId')
+  @ApiOperation({ summary: 'Chi tiet giao dich hoan tien' })
+  getRefund(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Param('refundId', ParseIntPipe) refundId: number,
+  ) {
+    return this.orderService.getRefund(orgId, haravanOrderId, refundId);
+  }
+
+  /** Hoàn tiền cho đơn đã thu tiền. */
+  @Post(':orgId/:haravanOrderId/refunds')
+  @ApiOperation({ summary: 'Hoan tien don hang' })
+  async refund(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Body() body: CreateRefundBody,
+    @User() user?: { id?: number; email?: string },
+  ) {
+    const transaction = body?.transactions?.[0];
+    const order = await this.orderService.refundOrder({
+      orgId,
+      haravanOrderId,
+      actor: body?.actor ?? user?.email ?? 'admin',
+      amount: transaction?.amount,
+      gateway: transaction?.gateway,
+      note: transaction?.note ?? body?.note,
+    });
+    return { refunded: true, order };
+  }
+
+  @Get(':orgId/:haravanOrderId/transactions')
+  @ApiOperation({ summary: 'Danh sach giao dich cua don hang' })
+  listTransactions(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+  ) {
+    return this.orderService.listTransactions(orgId, haravanOrderId);
+  }
+
+  @Post(':orgId/:haravanOrderId/transactions')
+  @ApiOperation({ summary: 'Tao giao dich cho don hang (thanh toan)' })
+  async createTransaction(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Body() body: { amount: number; kind: string },
+  ) {
+    const transaction = await this.orderService.createTransaction({
+      orgId,
+      haravanOrderId,
+      amount: body?.amount ?? 0,
+      kind: body?.kind ?? 'capture',
+    });
+    return { transaction, success: true };
+  }
+
   @Post('webhooks/:eventId/replay')
   @ApiOperation({ summary: 'Chay lai xu ly mot webhook da nhan' })
   async replay(@Param('eventId') eventId: string) {

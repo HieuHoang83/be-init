@@ -5,6 +5,7 @@ import { ApiModule } from '../api/api.module';
 import { appConfig } from '../config';
 import { QueueModule } from '../queue/queue.module';
 import { WebhookPrivateModule } from '../webhook-private/webhook-private.module';
+import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
 import { OrderController } from './order.controller';
 import { OrderWorker } from './order.worker';
 import { OrderService } from './order.service';
@@ -25,6 +26,7 @@ import { Customer, CustomerSchema } from './customer.entity';
     QueueModule,
     ApiModule,
     WebhookPrivateModule,
+    ShopSettingsModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: OrderAction.name, schema: OrderActionSchema },

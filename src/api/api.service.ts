@@ -131,6 +131,138 @@ export class ApiClient {
   }
 
   /**
+   * Hủy đơn: POST /com/orders/{order_id}/cancel.json
+   * `amount` là số tiền hoàn lại (bỏ trống = hoàn toàn bộ), `refund` chỉ dùng khi
+   * đơn đã capture; `restock` trả lại tồn kho.
+   */
+  cancelOrder(
+    orgId: number,
+    orderId: number,
+    body: Record<string, unknown> = {},
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'POST',
+      `/orders/${orderId}/cancel.json`,
+      body,
+    );
+  }
+
+  /** Đóng đơn: POST /com/orders/{order_id}/close.json */
+  closeOrder(
+    orgId: number,
+    orderId: number,
+    body: Record<string, unknown> = {},
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'POST',
+      `/orders/${orderId}/close.json`,
+      body,
+    );
+  }
+
+  /** Mở lại đơn đã đóng: POST /com/orders/{order_id}/open.json */
+  openOrder(
+    orgId: number,
+    orderId: number,
+    body: Record<string, unknown> = {},
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'POST',
+      `/orders/${orderId}/open.json`,
+      body,
+    );
+  }
+
+  /**
+   * Cập nhật đơn: PUT /com/orders/{order_id}.json
+   * Haravan không cho sửa line_items / số lượng / financial_status.
+   */
+  updateOrder(
+    orgId: number,
+    orderId: number,
+    body: Record<string, unknown>,
+  ): Promise<ApiResponse<OrderPayload>> {
+    return this.request<OrderPayload>(
+      orgId,
+      'PUT',
+      `/orders/${orderId}.json`,
+      body,
+    );
+  }
+
+  /** Danh sách giao dịch hoàn tiền: GET /com/orders/{order_id}/refunds.json */
+  listRefunds(
+    orgId: number,
+    orderId: number,
+    page = 1,
+    limit = 20,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'GET',
+      `/orders/${orderId}/refunds.json`,
+      undefined,
+      { page, limit },
+    );
+  }
+
+  /** Chi tiết một giao dịch hoàn tiền: GET /com/orders/{order_id}/refunds/{refund_id}.json */
+  getRefund(
+    orgId: number,
+    orderId: number,
+    refundId: number,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'GET',
+      `/orders/${orderId}/refunds/${refundId}.json`,
+    );
+  }
+
+  /** Hoàn tiền: POST /com/orders/{order_id}/refunds.json */
+  createRefund(
+    orgId: number,
+    orderId: number,
+    body: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'POST',
+      `/orders/${orderId}/refunds.json`,
+      body,
+    );
+  }
+
+  /** Danh sách giao dịch của đơn: GET /com/orders/{order_id}/transactions.json */
+  listTransactions(
+    orgId: number,
+    orderId: number,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'GET',
+      `/orders/${orderId}/transactions.json`,
+    );
+  }
+
+  /** Tạo giao dịch (thanh toán): POST /com/orders/{order_id}/transactions.json */
+  createTransaction(
+    orgId: number,
+    orderId: number,
+    body: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'POST',
+      `/orders/${orderId}/transactions.json`,
+      body,
+    );
+  }
+
+  /**
    * Gọi Omni API tùy ý (`/com/{path}`). Dùng cho Product, Customer và resource
    * khác theo tài liệu Haravan.
    */
