@@ -37,3 +37,9 @@ lerna-debug.log*
 
 # log webhook debug
 logs/
+
+# script/ky thuat tam thoi khong commit
+tmpcheck*/
+_p*.cjs
+_p*.mjs
+*.stackdump
