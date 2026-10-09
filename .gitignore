@@ -11,14 +11,11 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
-
 # OS
 .DS_Store
-
 # Tests
 /coverage
 /.nyc_output
-
 # IDEs and editors
 /.idea
 .project
@@ -27,19 +24,18 @@ lerna-debug.log*
 *.launch
 .settings/
 *.sublime-workspace
-.env
 # IDE - VSCode
 .vscode
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
-
 # log webhook debug
 logs/
-
 # script/ky thuat tam thoi khong commit
 tmpcheck*/
 _p*.cjs
 _p*.mjs
 *.stackdump
+
+# .env duoc commit de may moi clone ve la chay duoc
