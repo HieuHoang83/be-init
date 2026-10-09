@@ -8,13 +8,13 @@ import { ConfigType } from '@nestjs/config';
 import { Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { appConfig, RuleConfig } from '../config';
-import { extractOrder } from '../core/webhook-payload.util';
-import { OrderPayload } from '../interface/order.interface';
-import { hasRealCustomerIdentity } from './customer-identity.util';
-import { ApiClient } from '../api/api.service';
-import { CreateOrderBody } from './dto/order.dto';
-import { Customer, CustomerDocument } from './customer.entity';
+import { appConfig, RuleConfig } from '../../config';
+import { extractOrder } from '../../core/webhook-payload.util';
+import { OrderPayload } from '../../interface/order.interface';
+import { hasRealCustomerIdentity } from '../utils/customer-identity.util';
+import { ApiClient } from '../../api/api.service';
+import { CreateOrderBody } from '../dto/order.dto';
+import { Customer, CustomerDocument } from '../entities/customer.entity';
 import {
   ActionResult,
   ActionType,
@@ -28,8 +28,8 @@ import {
   OrderEventSource,
   OrderStatus,
   SkipReason,
-} from './order.entity';
-import { ConfirmDecision, decideConfirm } from './order.rules';
+} from '../entities/order.entity';
+import { ConfirmDecision, decideConfirm } from '../rules/order.rules';
 import { OrderAuditService } from './order-audit.service';
 import {
   buildCustomerPatch,
@@ -39,7 +39,7 @@ import {
   resolveFullName,
   resolveHaravanOrderStatus,
   toProcessing,
-} from './order.mapper';
+} from '../mappers/order.mapper';
 
 export interface ProcessResult {
   order: OrderDocument;
@@ -756,9 +756,36 @@ export class OrderService {
     try {
       const res = await this.apiClient.confirmOrder(orgId, haravanOrderId);
 
-      order.status = OrderStatus.CONFIRMED;
-      order.processing = { ...order.processing, ...toProcessing(decision) };
-      await order.save();
+      // Haravan tra ve payload don hang da xac nhan; dong bo ngay de FE reload
+      // la thay trang thai moi, khong phai cho webhook orders/update.
+      let mirrored: OrderDocument | null = null;
+      try {
+        mirrored = await this.mirrorOrderFromApi(
+          orgId,
+          haravanOrderId,
+          res.body,
+        );
+      } catch (mirrorError) {
+        // Haravan da xac nhan xong; chi can giu duong fallback de khong
+        // bao loi xac nhan khi dong bo that bai.
+        this.logger.warn(
+          `Khong dong bo duoc don ${haravanOrderId} sau khi xac nhan: ` +
+            `${(mirrorError as Error).message}`,
+        );
+      }
+      const target = mirrored ?? order;
+      target.status = OrderStatus.CONFIRMED;
+      target.processing = { ...target.processing, ...toProcessing(decision) };
+      if (target.confirmedStatus?.toLowerCase() !== 'confirmed') {
+        target.confirmedStatus = 'confirmed';
+      }
+      if (target.payload?.confirmed_status?.toLowerCase() !== 'confirmed') {
+        target.payload = {
+          ...(target.payload ?? {}),
+          confirmed_status: 'confirmed',
+        } as OrderPayload;
+      }
+      await target.save();
 
       if (manual) {
         await this.audit.logOrderEvent({

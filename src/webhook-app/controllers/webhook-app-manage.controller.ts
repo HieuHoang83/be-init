@@ -1,11 +1,11 @@
 import { Body, Controller, Delete, Get, Logger, Post } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ApiClient } from '../api/api.service';
-import { WebhookAppService } from './webhook-app.service';
+import { ApiClient } from '../../api/api.service';
+import { WebhookAppService } from '../services/webhook-app.service';
 import {
   SubscribedWebhookListResponse,
   WebhookSubscribeResponse,
-} from './webhook-app.interface';
+} from '../interfaces/webhook-app.interface';
 
 /** Lấy org_id từ query hoặc body; nếu thiếu thì dùng org_id trong .env. */
 function resolveOrgId(from: Record<string, unknown> | undefined): number {

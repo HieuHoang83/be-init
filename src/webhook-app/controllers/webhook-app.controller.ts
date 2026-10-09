@@ -15,22 +15,22 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
-import { Public } from '../decorators/customize';
+import { Public } from '../../decorators/customize';
 import {
   extractOrder,
   extractOrgId,
   readWebhookMeta,
-} from '../core/webhook-payload.util';
-import { ORDER_TOPIC_SET } from '../interface/order.interface';
-import { HmacRequest } from '../core/webhook-hmac.guard';
-import { HMAC_HEADER } from '../core/webhook-hmac.util';
-import { logWebhookPayload } from '../core/webhook-payload-logger';
-import { OrderService } from '../order/order.service';
-import { JobQueue, JOB_NAMES } from '../queue/queue.service';
-import { WebhookPrivateStatus } from '../webhook-private/webhook-private.entity';
-import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
-import { WebhookAppHmacGuard } from './webhook-app.guard';
-import { WebhookAppService } from './webhook-app.service';
+} from '../../core/webhook-payload.util';
+import { ORDER_TOPIC_SET } from '../../interface/order.interface';
+import { HmacRequest } from '../../core/webhook-hmac.guard';
+import { HMAC_HEADER } from '../../core/webhook-hmac.util';
+import { logWebhookPayload } from '../../core/webhook-payload-logger';
+import { OrderService } from '../../order/services/order.service';
+import { JobQueue, JOB_NAMES } from '../../queue/queue.service';
+import { WebhookPrivateStatus } from '../../webhook-private/webhook-private.entity';
+import { WebhookPrivateService } from '../../webhook-private/webhook-private.service';
+import { WebhookAppHmacGuard } from '../guards/webhook-app.guard';
+import { WebhookAppService } from '../services/webhook-app.service';
 
 /** Chỉ giữ lại các header cần cho việc kiểm tra. */
 function pickHeaders(headers: Record<string, unknown>): Record<string, string> {

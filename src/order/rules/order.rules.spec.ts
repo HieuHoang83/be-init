@@ -1,4 +1,4 @@
-import { SkipReason } from './order.entity';
+import { SkipReason } from '../entities/order.entity';
 import { ConfirmInput, decideConfirm } from './order.rules';
 
 /**

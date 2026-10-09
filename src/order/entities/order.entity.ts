@@ -6,7 +6,7 @@ import {
   FULFILLMENT_STATUSES,
   FulfillmentStatus,
   OrderPayload,
-} from '../interface/order.interface';
+} from '../../interface/order.interface';
 
 /** Lý do bỏ qua xác nhận tự động. */
 export enum SkipReason {

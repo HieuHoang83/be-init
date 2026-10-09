@@ -9,11 +9,11 @@ import {
 } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
 import type { Response } from 'express';
-import { appConfig } from '../config';
-import { ApiClient, ApiError } from '../api/api.service';
-import { logWebhookPayload } from '../core/webhook-payload-logger';
-import { AccessTokenStore } from '../api/access-token.store';
-import { WebhookAppService } from './webhook-app.service';
+import { appConfig } from '../../config';
+import { ApiClient, ApiError } from '../../api/api.service';
+import { logWebhookPayload } from '../../core/webhook-payload-logger';
+import { AccessTokenStore } from '../../api/access-token.store';
+import { WebhookAppService } from '../services/webhook-app.service';
 
 /**
  * Callback OAuth của ứng dụng Haravan, từ bước 2 sang bước 3.

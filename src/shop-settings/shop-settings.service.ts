@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Shop, ShopDocument } from '../webhook-app/webhook-app.entity';
+import { Shop, ShopDocument } from '../webhook-app/entities/webhook-app.entity';
 import { UpdateShopSettingsDto } from './dto/update-shop-settings.dto';
 
 @Injectable()

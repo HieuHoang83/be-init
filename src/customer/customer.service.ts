@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Customer, CustomerDocument } from '../order/customer.entity';
-import { Order, OrderDocument, OrderStatus } from '../order/order.entity';
+import { Customer, CustomerDocument } from '../order/entities/customer.entity';
+import { Order, OrderDocument, OrderStatus } from '../order/entities/order.entity';
 
 export interface CustomerStats {
   /** Tổng số khách hiện có trong hệ thống. */

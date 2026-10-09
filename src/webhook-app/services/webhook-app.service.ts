@@ -2,12 +2,12 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { ConfigType } from '@nestjs/config';
-import { appConfig } from '../config';
+import { appConfig } from '../../config';
 import {
   AppInstallation,
   AppInstallationDocument,
   AppWebhookStatus,
-} from './webhook-app.entity';
+} from '../entities/webhook-app.entity';
 
 /**
  * Lưu thông tin ứng dụng đã cài đặt, gồm client secret và verify token để

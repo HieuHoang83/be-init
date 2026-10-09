@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { appConfig } from '../config';
-import { Shop, ShopSchema } from '../webhook-app/webhook-app.entity';
+import { Shop, ShopSchema } from '../webhook-app/entities/webhook-app.entity';
 import { AccessTokenStore } from './access-token.store';
 import { ApiClient } from './api.service';
 

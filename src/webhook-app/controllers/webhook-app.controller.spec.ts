@@ -1,5 +1,5 @@
 import { WebhookAppController } from './webhook-app.controller';
-import { ORDER_TOPIC_SET } from '../interface/order.interface';
+import { ORDER_TOPIC_SET } from '../../interface/order.interface';
 
 describe('WebhookAppController - chi xu ly su kien don hang', () => {
   const record = jest.fn();

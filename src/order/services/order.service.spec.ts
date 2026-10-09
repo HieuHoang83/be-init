@@ -12,11 +12,11 @@ import {
   OrderEvent,
   OrderStatus,
   SkipReason,
-} from './order.entity';
-import { Customer } from './customer.entity';
-import { appConfig } from '../config';
-import { ApiClient } from '../api/api.service';
-import { ShopSettingsService } from '../shop-settings/shop-settings.service';
+} from '../entities/order.entity';
+import { Customer } from '../entities/customer.entity';
+import { appConfig } from '../../config';
+import { ApiClient } from '../../api/api.service';
+import { ShopSettingsService } from '../../shop-settings/shop-settings.service';
 
 describe('OrderService - evaluateConfirmEligibility', () => {
   let service: OrderService;
@@ -813,8 +813,10 @@ describe('OrderService - evaluateConfirmEligibility', () => {
 
       expect(apiMock.confirmOrder).toHaveBeenCalledWith(1, 2);
       expect(res.confirmed).toBe(true);
-      expect(order.confirmedStatus).toBe('unconfirmed');
-      expect(order.payload?.confirmed_status).toBe('unconfirmed');
+      // FE doc payload.confirmed_status truoc, nen confirm xong phai ghi
+      // ngay vao payload de reload thay dung trang thai moi.
+      expect(order.confirmedStatus).toBe('confirmed');
+      expect(order.payload?.confirmed_status).toBe('confirmed');
     });
 
     it('force=true bo qua rule, xac nhan du khach moi', async () => {

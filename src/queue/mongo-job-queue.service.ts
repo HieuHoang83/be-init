@@ -4,7 +4,13 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appConfig, QueueConfig } from '../config';
-import { JobQueue, Job, QueueStats } from './queue.service';
+import {
+  EnqueueOptions,
+  JobQueue,
+  Job,
+  JobView,
+  QueueStats,
+} from './queue.service';
 import { Job as JobEntity, JobDocument, JobStatus } from './job.entity';
 
 /* ---------------------------------- Tạo ULID */
@@ -104,7 +110,11 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
 
   /* --------------------------------- Thêm công việc */
 
-  async enqueue<T>(name: string, payload: T): Promise<Job<T>> {
+  async enqueue<T>(
+    name: string,
+    payload: T,
+    options: EnqueueOptions = {},
+  ): Promise<Job<T>> {
     if (!this.handlers.has(name)) {
       throw new Error(`Khong co handler cho job "${name}"`);
     }
@@ -116,7 +126,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
       status: 'pending',
       payload: payload as Record<string, unknown>,
       attempts: 0,
-      maxAttempts: this.cfg.maxAttempts,
+      maxAttempts: options.maxAttempts ?? this.cfg.maxAttempts,
       totalRows: null,
       processedRows: 0,
       availableAt: now,
@@ -131,6 +141,25 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
       maxAttempts: doc.maxAttempts,
       enqueuedAt: now,
       lockToken: null,
+    };
+  }
+
+  /** Đọc một công việc theo id; FE dùng để theo dõi kết quả thao tác. */
+  async findById(jobId: string): Promise<JobView | null> {
+    if (!jobId?.trim()) return null;
+    const doc = await this.jobModel.findOne({ id: jobId }).lean().exec();
+    if (!doc) return null;
+    return {
+      id: doc.id,
+      name: doc.type,
+      status: doc.status,
+      attempts: doc.attempts,
+      maxAttempts: doc.maxAttempts,
+      error: doc.error ?? null,
+      result: doc.resultKey ?? null,
+      payload: (doc.payload ?? null) as Record<string, unknown> | null,
+      createdAt: doc.createdAt ?? undefined,
+      finishedAt: doc.finishedAt ?? null,
     };
   }
 
@@ -262,7 +291,12 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
    * Nếu còn lượt thử, đưa công việc về `pending` và chờ theo backoff;
    * nếu hết lượt, chuyển sang `failed`.
    */
-  async fail(jobId: string, lockToken: string, error: string): Promise<void> {
+  async fail(
+    jobId: string,
+    lockToken: string,
+    error: string,
+    options: { retry?: boolean } = {},
+  ): Promise<void> {
     const owner = {
       id: jobId,
       status: 'running',
@@ -272,7 +306,7 @@ export class MongoJobQueue extends JobQueue implements OnModuleDestroy {
     const doc = await this.jobModel.findOne(owner).exec();
     if (!doc) return;
 
-    const willRetry = doc.attempts < doc.maxAttempts;
+    const willRetry = (options.retry ?? true) && doc.attempts < doc.maxAttempts;
     const delay = this.backoffMs(doc.attempts);
 
     const result = await this.jobModel

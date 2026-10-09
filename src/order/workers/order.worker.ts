@@ -1,10 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { OrderPayload } from '../interface/order.interface';
-import { logOrderDecision } from '../core/order-decision-logger';
-import { WebhookPrivateStatus } from '../webhook-private/webhook-private.entity';
-import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
-import { OrderService } from './order.service';
-import { Job, JobQueue, JOB_NAMES } from '../queue/queue.service';
+import { OrderPayload } from '../../interface/order.interface';
+import { logOrderDecision } from '../../core/order-decision-logger';
+import { WebhookPrivateStatus } from '../../webhook-private/webhook-private.entity';
+import { WebhookPrivateService } from '../../webhook-private/webhook-private.service';
+import { OrderService } from '../services/order.service';
+import { Job, JobQueue, JOB_NAMES } from '../../queue/queue.service';
 
 export interface OrderCreatedPayload {
   orgId: number;

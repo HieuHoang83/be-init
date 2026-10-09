@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Shop, ShopSchema } from '../webhook-app/webhook-app.entity';
+import { Shop, ShopSchema } from '../webhook-app/entities/webhook-app.entity';
 import { ShopSettingsController } from './shop-settings.controller';
 import { ShopSettingsService } from './shop-settings.service';
 

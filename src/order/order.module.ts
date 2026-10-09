@@ -7,11 +7,12 @@ import { QueueModule } from '../queue/queue.module';
 import { WebhookPrivateModule } from '../webhook-private/webhook-private.module';
 import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
 import { OrderController } from './order.controller';
-import { OrderWorker } from './order.worker';
-import { OrderService } from './order.service';
-import { OrderActionsService } from './order-actions.service';
-import { OrderAuditService } from './order-audit.service';
-import { OrderQueryService } from './order-query.service';
+import { OrderActionWorker } from './workers/order-action.worker';
+import { OrderWorker } from './workers/order.worker';
+import { OrderService } from './services/order.service';
+import { OrderActionsService } from './services/order-actions.service';
+import { OrderAuditService } from './services/order-audit.service';
+import { OrderQueryService } from './services/order-query.service';
 import {
   Order,
   OrderAction,
@@ -19,8 +20,8 @@ import {
   OrderEvent,
   OrderEventSchema,
   OrderSchema,
-} from './order.entity';
-import { Customer, CustomerSchema } from './customer.entity';
+} from './entities/order.entity';
+import { Customer, CustomerSchema } from './entities/customer.entity';
 
 /** Module xử lý đơn hàng. */
 @Module({
@@ -44,6 +45,7 @@ import { Customer, CustomerSchema } from './customer.entity';
     OrderActionsService,
     OrderAuditService,
     OrderWorker,
+    OrderActionWorker,
   ],
   exports: [OrderService, OrderQueryService, OrderActionsService, OrderAuditService],
 })

@@ -3,6 +3,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   NotFoundException,
   Param,
   ParseIntPipe,
@@ -13,9 +15,10 @@ import {
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { User } from '../decorators/customize';
 import { JobQueue } from '../queue/queue.service';
-import { OrderService } from './order.service';
-import { OrderActionsService } from './order-actions.service';
-import { OrderQueryService } from './order-query.service';
+import { OrderActionJobPayload } from './workers/order-action.worker';
+import { OrderService } from './services/order.service';
+import { OrderActionsService } from './services/order-actions.service';
+import { OrderQueryService } from './services/order-query.service';
 import { extractOrder } from '../core/webhook-payload.util';
 import { JOB_NAMES } from '../queue/queue.service';
 import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
@@ -25,8 +28,10 @@ import {
   ConfirmOrderBody,
   CreateRefundBody,
   CreateOrderBody,
+  CreateTransactionBody,
   ListRefundsQuery,
   ListOrdersQuery,
+  ListTransactionsQuery,
   OpenOrderBody,
   UpdateOrderBody,
 } from './dto/order.dto';
@@ -75,6 +80,28 @@ export class OrderController {
     private readonly webhookService: WebhookPrivateService,
     private readonly jobQueue: JobQueue,
   ) {}
+
+  /**
+   * Đẩy một thao tác lên Haravan vào hàng đợi và trả `jobId` cho FE theo dõi.
+   *
+   * Controller không gọi Haravan trực tiếp nữa: số lượng request song song bị
+   * giới hạn bởi `HARAVAN_QUEUE_CONCURRENCY`, và kết quả thật được báo lại sau khi
+   * worker chạy xong qua `GET :orgId/jobs/:jobId`.
+   */
+  private async queueAction(
+    name: string,
+    payload: OrderActionJobPayload,
+    action: string,
+    options?: { maxAttempts?: number },
+  ) {
+    const job = await this.jobQueue.enqueue(name, payload, options);
+    return {
+      queued: true,
+      jobId: job.id,
+      action,
+      status: 'pending' as const,
+    };
+  }
 
   @Get()
   @ApiOperation({
@@ -387,6 +414,27 @@ export class OrderController {
     return { order, events };
   }
 
+  /**
+   * Trang thai thao tac da day vao hang doi. FE poll endpoint nay de biet
+   * Haravan da tra ket qua chua.
+   */
+  @Get(':orgId/jobs/:jobId')
+  @ApiOperation({ summary: 'Trang thai job thao tac tren Haravan' })
+  async jobStatus(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('jobId') jobId: string,
+  ) {
+    const job = await this.jobQueue.findById(jobId);
+    if (!job) {
+      throw new NotFoundException(`Khong tim thay job ${jobId}`);
+    }
+    const jobOrgId = Number(job.payload?.['orgId']);
+    if (Number.isFinite(jobOrgId) && jobOrgId !== orgId) {
+      throw new NotFoundException(`Khong tim thay job ${jobId}`);
+    }
+    return job;
+  }
+
   @Get(':orgId/:haravanOrderId/actions')
   @ApiOperation({ summary: 'Lich su thao tac cua don' })
   actions(
@@ -397,16 +445,30 @@ export class OrderController {
   }
 
   @Post(':orgId/create')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Tao don hang tren Haravan' })
   create(
     @Param('orgId', ParseIntPipe) orgId: number,
     @Body() body: CreateOrderBody,
+    @User() user?: { id?: number; email?: string },
   ) {
-    return this.orderService.createOrder(orgId, body);
+    return this.queueAction(
+      JOB_NAMES.ORDER_CREATE,
+      {
+        orgId,
+        actor: user?.email ?? 'admin',
+        manual: true,
+        body: body as unknown as Record<string, unknown>,
+      },
+      'create',
+      // Chi thu 1 lan: thu lai tao don co the sinh don nhep tren Haravan.
+      { maxAttempts: 1 },
+    );
   }
 
   /** Admin xác nhận đơn thủ công. */
   @Post(':orgId/:haravanOrderId/confirm')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Xac nhan don thu cong qua Haravan API' })
   async confirm(
     @Param('orgId', ParseIntPipe) orgId: number,
@@ -414,28 +476,19 @@ export class OrderController {
     @Body() body: ConfirmOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const result = await this.orderService.confirmOrder({
+    return this.queueAction(JOB_NAMES.ORDER_CONFIRM, {
       orgId,
       haravanOrderId,
-      manual: true,
       actor: body?.actor ?? user?.email ?? 'admin',
-      force: body?.force ?? false,
-      source: 'manual',
-    });
-
-    return {
-      confirmed: result.confirmed,
-      orderNumber: result.order.orderNumber,
-      orderName: result.order.orderName,
-      status: result.order.status,
-      processing: result.order.processing,
-      actionLogId: result.actionLogId,
-    };
+      manual: true,
+      body: { force: body?.force ?? false },
+    }, 'confirm');
   }
 
   /** Chạy lại webhook lỗi. */
   /** Admin huỷ đơn, tuỳ chọn hoàn tiền / hoàn tồn kho. */
   @Post(':orgId/:haravanOrderId/cancel')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Huy don hang tren Haravan' })
   async cancel(
     @Param('orgId', ParseIntPipe) orgId: number,
@@ -443,23 +496,17 @@ export class OrderController {
     @Body() body: CancelOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderActions.cancelOrder({
+    return this.queueAction(JOB_NAMES.ORDER_CANCEL, {
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
-      amount: body?.amount,
-      email: body?.email,
-      reason: body?.reason,
-      refund: body?.refund,
-      restock: body?.restock,
-      note: body?.note,
-      ignoreCancelFulfillment: body?.ignore_cancel_fulfillment,
-    });
-    return { cancelled: true, order };
+      body: body as unknown as Record<string, unknown>,
+    }, 'cancel');
   }
 
   /** Đóng đơn. */
   @Post(':orgId/:haravanOrderId/close')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Dong don hang' })
   async close(
     @Param('orgId', ParseIntPipe) orgId: number,
@@ -467,17 +514,17 @@ export class OrderController {
     @Body() body: CloseOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderActions.closeOrder({
+    return this.queueAction(JOB_NAMES.ORDER_CLOSE, {
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
-      note: body?.note,
-    });
-    return { closed: true, order };
+      body: body as unknown as Record<string, unknown>,
+    }, 'close');
   }
 
   /** Mở lại đơn đã đóng. */
   @Post(':orgId/:haravanOrderId/open')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Mo lai don hang' })
   async open(
     @Param('orgId', ParseIntPipe) orgId: number,
@@ -485,16 +532,16 @@ export class OrderController {
     @Body() body: OpenOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderActions.openOrder({
+    return this.queueAction(JOB_NAMES.ORDER_OPEN, {
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
-    });
-    return { opened: true, order };
+    }, 'open');
   }
 
   /** Cập nhật thông tin đơn (không đổi line_items / financial_status). */
   @Put(':orgId/:haravanOrderId')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Cap nhat don hang' })
   async update(
     @Param('orgId', ParseIntPipe) orgId: number,
@@ -502,16 +549,12 @@ export class OrderController {
     @Body() body: UpdateOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderActions.updateOrder({
+    return this.queueAction(JOB_NAMES.ORDER_UPDATE, {
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
-      note: body?.note,
-      noteAttributes: body?.note_attributes,
-      email: body?.email,
-      phone: body?.phone,
-    });
-    return { updated: true, order };
+      body: body as unknown as Record<string, unknown>,
+    }, 'update');
   }
 
   /** Lịch sử hoàn tiền của đơn. */
@@ -543,6 +586,7 @@ export class OrderController {
 
   /** Hoàn tiền cho đơn đã thu tiền. */
   @Post(':orgId/:haravanOrderId/refunds')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Hoan tien don hang' })
   async refund(
     @Param('orgId', ParseIntPipe) orgId: number,
@@ -550,16 +594,12 @@ export class OrderController {
     @Body() body: CreateRefundBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const transaction = body?.transactions?.[0];
-    const order = await this.orderActions.refundOrder({
+    return this.queueAction(JOB_NAMES.ORDER_REFUND, {
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
-      amount: transaction?.amount,
-      gateway: transaction?.gateway,
-      note: transaction?.note ?? body?.note,
-    });
-    return { refunded: true, order };
+      body: body as unknown as Record<string, unknown>,
+    }, 'refund');
   }
 
   @Get(':orgId/:haravanOrderId/transactions')
@@ -567,24 +607,40 @@ export class OrderController {
   listTransactions(
     @Param('orgId', ParseIntPipe) orgId: number,
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Query() query: ListTransactionsQuery,
   ) {
-    return this.orderActions.listTransactions(orgId, haravanOrderId);
+    return this.orderActions.listTransactions(orgId, haravanOrderId, query);
+  }
+
+  @Get(':orgId/:haravanOrderId/transactions/:transactionId')
+  @ApiOperation({ summary: 'Chi tiet mot giao dich cua don hang' })
+  getTransaction(
+    @Param('orgId', ParseIntPipe) orgId: number,
+    @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
+    @Param('transactionId', ParseIntPipe) transactionId: number,
+    @Query() query: ListTransactionsQuery,
+  ) {
+    return this.orderActions.getTransaction(
+      orgId,
+      haravanOrderId,
+      transactionId,
+      query,
+    );
   }
 
   @Post(':orgId/:haravanOrderId/transactions')
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({ summary: 'Tao giao dich cho don hang (thanh toan)' })
   async createTransaction(
     @Param('orgId', ParseIntPipe) orgId: number,
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
-    @Body() body: { amount: number; kind: string },
+    @Body() body: CreateTransactionBody,
   ) {
-    const transaction = await this.orderActions.createTransaction({
+    return this.queueAction(JOB_NAMES.ORDER_TRANSACTION, {
       orgId,
       haravanOrderId,
-      amount: body?.amount ?? 0,
-      kind: body?.kind ?? 'capture',
-    });
-    return { transaction, success: true };
+      body: body as unknown as Record<string, unknown>,
+    }, 'transaction');
   }
 
   @Post('webhooks/:eventId/replay')

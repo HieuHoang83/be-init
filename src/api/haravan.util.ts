@@ -4,7 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ApiError } from '../api/api.service';
+import { ApiError } from './api.service';
 
 export function compactQuery(
   query: Record<string, unknown>,

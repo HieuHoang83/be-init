@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { hasRealCustomerIdentity } from './customer-identity.util';
+import { hasRealCustomerIdentity } from '../utils/customer-identity.util';
 import {
   Order,
   OrderDocument,
   OrderEventDocument,
   OrderStatus,
-} from './order.entity';
+} from '../entities/order.entity';
 import { OrderAuditService } from './order-audit.service';
 import { OrderService } from './order.service';
 

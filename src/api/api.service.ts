@@ -12,7 +12,7 @@ import { OrderPayload } from '../interface/order.interface';
 import {
   SubscribedWebhookListResponse,
   WebhookSubscribeResponse,
-} from '../webhook-app/webhook-app.interface';
+} from '../webhook-app/interfaces/webhook-app.interface';
 import { AccessTokenStore } from './access-token.store';
 
 export interface OAuthTokenResponse {
@@ -240,11 +240,33 @@ export class ApiClient {
   listTransactions(
     orgId: number,
     orderId: number,
+    params: Record<string, string | number> = {},
   ): Promise<ApiResponse<unknown>> {
     return this.request<unknown>(
       orgId,
       'GET',
       `/orders/${orderId}/transactions.json`,
+      undefined,
+      params,
+    );
+  }
+
+  /**
+   * Chi tiết một giao dịch:
+   * GET /com/orders/{order_id}/transactions/{transaction_id}.json
+   */
+  getTransaction(
+    orgId: number,
+    orderId: number,
+    transactionId: number,
+    params: Record<string, string | number> = {},
+  ): Promise<ApiResponse<unknown>> {
+    return this.request<unknown>(
+      orgId,
+      'GET',
+      `/orders/${orderId}/transactions/${transactionId}.json`,
+      undefined,
+      params,
     );
   }
 

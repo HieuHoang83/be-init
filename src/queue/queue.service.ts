@@ -17,17 +17,64 @@ export interface Job<T = unknown> {
   attempt: number;
   maxAttempts: number;
   enqueuedAt: Date;
+  /**
+   * Kết quả ngắn mà handler ghi sau khi xử lý xong. Worker truyền giá trị này
+   * cho `complete` để lưu vào `resultKey`, nhờ đó FE hiển thị được thông báo.
+   */
+  result?: string;
 }
 
 export type JobHandler<T = unknown> = (job: Job<T>) => Promise<void>;
 
+/**
+ * Lỗi không thử lại được (sai dữ liệu, 422, 400…). Worker sẽ đánh dấu job
+ * thất bại ngay thay vì mất thêm vài giây chờ rồi thử lại y hệt.
+ */
+export class NonRetryableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NonRetryableError';
+  }
+}
+
 export const JOB_NAMES = {
   ORDER_CREATED: 'order.created',
+  /** Tạo đơn hàng trên Haravan theo yêu cầu của người dùng. */
+  ORDER_CREATE: 'order.create',
   ORDER_CONFIRM: 'order.confirm',
+  ORDER_CANCEL: 'order.cancel',
+  ORDER_CLOSE: 'order.close',
+  ORDER_OPEN: 'order.open',
+  ORDER_UPDATE: 'order.update',
+  ORDER_REFUND: 'order.refund',
+  ORDER_TRANSACTION: 'order.transaction',
   ORDER_SYNC_CUSTOMER: 'order.sync_customer',
 } as const;
 
 export type JobName = typeof JOB_NAMES[keyof typeof JOB_NAMES];
+
+/** Tuỳ chọn khi thêm công việc vào hàng đợi. */
+export interface EnqueueOptions {
+  /**
+   * Giới hạn số lần thử cho riêng công việc này. Công việc tạo đơn để mặc định
+   * `1`: nếu Haravan đã tạo xong mà phản hồi thất lạc, thử lại sẽ sinh đơn nhép.
+   */
+  maxAttempts?: number;
+}
+
+/** Hình dạng công việc trả về cho API (FE poll theo id). */
+export interface JobView {
+  id: string;
+  name: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  attempts: number;
+  maxAttempts: number;
+  error?: string | null;
+  result?: string | null;
+  payload?: Record<string, unknown> | null;
+  createdAt?: Date;
+  finishedAt?: Date | null;
+}
 
 export interface QueueStats {
   driver: string;
@@ -40,7 +87,14 @@ export interface QueueStats {
 
 export abstract class JobQueue {
   /** Thêm công việc vào hàng đợi và trả về bản ghi đã lưu. */
-  abstract enqueue<T>(name: string, payload: T): Promise<Job<T>>;
+  abstract enqueue<T>(
+    name: string,
+    payload: T,
+    options?: EnqueueOptions,
+  ): Promise<Job<T>>;
+
+  /** Đọc trạng thái hiện tại của một công việc để FE poll. */
+  abstract findById(jobId: string): Promise<JobView | null>;
 
   /** Đăng ký hàm xử lý theo tên công việc. */
   abstract registerHandler<T>(name: string, handler: JobHandler<T>): void;
@@ -67,7 +121,12 @@ export abstract class JobQueue {
   ): Promise<void>;
 
   /** Đánh dấu công việc thất bại; hàng đợi xử lý việc thử lại. */
-  abstract fail(jobId: string, lockToken: string, error: string): Promise<void>;
+  abstract fail(
+    jobId: string,
+    lockToken: string,
+    error: string,
+    options?: { retry?: boolean },
+  ): Promise<void>;
 
   /** Lấy thống kê hàng đợi; có thể trả về trực tiếp hoặc qua Promise. */
   abstract getStats(): QueueStats | Promise<QueueStats>;

@@ -1,10 +1,77 @@
 import { BadRequestException } from '@nestjs/common';
 import { validateSync } from 'class-validator';
 import { OrderController } from './order.controller';
-import { OrderService } from './order.service';
-import { OrderActionsService } from './order-actions.service';
-import { OrderQueryService } from './order-query.service';
+import { OrderService } from './services/order.service';
+import { OrderActionsService } from './services/order-actions.service';
+import { OrderQueryService } from './services/order-query.service';
 import { ListOrdersQuery } from './dto/order.dto';
+import {
+  CreateTransactionBody,
+  ListTransactionsQuery,
+  TRANSACTION_KINDS,
+} from './dto/order.dto';
+
+describe('OrderController transactions', () => {
+  const listTransactions = jest.fn();
+  const getTransaction = jest.fn();
+  const controller = new OrderController(
+    {} as unknown as OrderService,
+    {} as unknown as OrderQueryService,
+    { listTransactions, getTransaction } as unknown as OrderActionsService,
+    {} as never,
+    {} as never,
+  );
+
+  beforeEach(() => {
+    listTransactions.mockReset();
+    getTransaction.mockReset();
+  });
+
+  it('forwards the fields filter when listing transactions', async () => {
+    const query: ListTransactionsQuery = { fields: 'id,kind,amount' };
+    await controller.listTransactions(1, 2, query);
+
+    expect(listTransactions).toHaveBeenCalledWith(1, 2, query);
+  });
+
+  it('reads a single transaction of an order', async () => {
+    getTransaction.mockResolvedValue({ transaction: { id: 9 } });
+
+    await expect(controller.getTransaction(1, 2, 9, {})).resolves.toEqual({
+      transaction: { id: 9 },
+    });
+    expect(getTransaction).toHaveBeenCalledWith(1, 2, 9, {});
+  });
+
+  it('accepts only the documented transaction kinds', () => {
+    expect(TRANSACTION_KINDS).toEqual([
+      'pending',
+      'authorization',
+      'sale',
+      'capture',
+      'void',
+      'refund',
+    ]);
+
+    const errors = validateSync(
+      Object.assign(new CreateTransactionBody(), {
+        kind: 'not-a-kind',
+        amount: 10,
+      }),
+    );
+    expect(errors.length).toBeGreaterThan(0);
+  });
+
+  it('rejects a negative transaction amount', () => {
+    const errors = validateSync(
+      Object.assign(new CreateTransactionBody(), {
+        kind: 'sale',
+        amount: -1,
+      }),
+    );
+    expect(errors.length).toBeGreaterThan(0);
+  });
+});
 
 describe('OrderController list confirmation filter', () => {
   const findOrders = jest.fn();

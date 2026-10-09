@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import { HmacGuard } from '../core/webhook-hmac.guard';
-import { appConfig } from '../config';
-import { WebhookAppService } from './webhook-app.service';
+import { HmacGuard } from '../../core/webhook-hmac.guard';
+import { appConfig } from '../../config';
+import { WebhookAppService } from '../services/webhook-app.service';
 
 /**
  * Xác thực HMAC cho webhook ứng dụng.

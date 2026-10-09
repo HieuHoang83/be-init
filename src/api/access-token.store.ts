@@ -4,7 +4,7 @@ import { Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { appConfig } from '../config';
-import { Shop, ShopDocument } from '../webhook-app/webhook-app.entity';
+import { Shop, ShopDocument } from '../webhook-app/entities/webhook-app.entity';
 
 /**
  * Lấy `haravan-access-token` theo từng shop.

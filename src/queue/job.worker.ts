@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
 import { appConfig, QueueConfig } from '../config';
-import { Job, JobQueue } from './queue.service';
+import { Job, JobQueue, NonRetryableError } from './queue.service';
 import { MongoJobQueue } from './mongo-job-queue.service';
 
 interface RunningSlot {
@@ -118,7 +118,7 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
         await this.jobQueue.dispatch(job);
 
         if (typeof queue.complete === 'function') {
-          await queue.complete(job.id, lockToken);
+          await queue.complete(job.id, lockToken, job.result);
         }
         this.logger.log(
           `Job ${job.id} (${job.name}) xong trong ${Date.now() - started}ms`,
@@ -126,7 +126,9 @@ export class JobWorker implements OnApplicationBootstrap, OnModuleDestroy {
       } catch (error) {
         const message = (error as Error).message ?? String(error);
         try {
-          await queue.fail?.(job.id, lockToken, message);
+          // Lỗi dữ liệu (400/422…) thử lại cũng vậy, nên đánh dấu thất bại ngay.
+          const retry = !(error instanceof NonRetryableError);
+          await queue.fail?.(job.id, lockToken, message, { retry });
         } catch (failErr) {
           this.logger.error(
             `Khong ghi duoc loi cho job ${job.id}: ${

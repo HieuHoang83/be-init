@@ -11,7 +11,7 @@ import {
   OrderEventDocument,
   OrderEventSource,
   SkipReason,
-} from './order.entity';
+} from '../entities/order.entity';
 
 /** Thông tin bổ sung khi ghi một lần gọi API vào nhật ký kỹ thuật. */
 export interface ActionLogExtra {

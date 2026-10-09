@@ -6,17 +6,17 @@ import { ApiModule } from '../api/api.module';
 import { OrderModule } from '../order/order.module';
 import { QueueModule } from '../queue/queue.module';
 import { WebhookPrivateModule } from '../webhook-private/webhook-private.module';
-import { WebhookAppController } from './webhook-app.controller';
-import { WebhookAppManageController } from './webhook-app-manage.controller';
-import { WebhookAppHmacGuard } from './webhook-app.guard';
-import { WebhookOauthController } from './webhook-oauth.controller';
-import { WebhookAppService } from './webhook-app.service';
+import { WebhookAppController } from './controllers/webhook-app.controller';
+import { WebhookAppManageController } from './controllers/webhook-app-manage.controller';
+import { WebhookAppHmacGuard } from './guards/webhook-app.guard';
+import { WebhookOauthController } from './controllers/webhook-oauth.controller';
+import { WebhookAppService } from './services/webhook-app.service';
 import {
   AppInstallation,
   AppInstallationSchema,
   Shop,
   ShopSchema,
-} from './webhook-app.entity';
+} from './entities/webhook-app.entity';
 
 /**
  * Module nhận webhook của ứng dụng, đăng ký qua hub.verify_token và

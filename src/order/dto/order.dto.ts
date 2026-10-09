@@ -459,3 +459,50 @@ export class ListRefundsQuery {
   @Max(100)
   limit?: number;
 }
+
+/**
+ * 5 loại giao dịch theo tài liệu Haravan Transaction:
+ * pending, authorization, sale, capture, void, refund.
+ */
+export const TRANSACTION_KINDS = [
+  'pending',
+  'authorization',
+  'sale',
+  'capture',
+  'void',
+  'refund',
+] as const;
+
+export type TransactionKind = (typeof TRANSACTION_KINDS)[number];
+
+export class CreateTransactionBody {
+  @IsIn(TRANSACTION_KINDS as unknown as string[])
+  kind!: TransactionKind;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  amount!: number;
+
+  @IsOptional()
+  @IsString()
+  gateway?: string;
+
+  /** Giao dịch cha (ví dụ refund tham chiếu capture trước đó). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  parentId?: number;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class ListTransactionsQuery {
+  /** Danh sách field cần lấy, cách nhau bằng dấu phẩy. */
+  @IsOptional()
+  @IsString()
+  fields?: string;
+}

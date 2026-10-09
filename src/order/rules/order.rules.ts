@@ -1,4 +1,4 @@
-import { SkipReason } from './order.entity';
+import { SkipReason } from '../entities/order.entity';
 
 export interface ConfirmDecision {
   shouldConfirm: boolean;

@@ -4,8 +4,8 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiClient } from '../api/api.service';
-import { OrderPayload } from '../interface/order.interface';
+import { ApiClient } from '../../api/api.service';
+import { OrderPayload } from '../../interface/order.interface';
 import { OrderAuditService } from './order-audit.service';
 import {
   ActionResult,
@@ -13,7 +13,7 @@ import {
   OrderDocument,
   OrderEventAction,
   OrderStatus,
-} from './order.entity';
+} from '../entities/order.entity';
 import { OrderService } from './order.service';
 
 /**
@@ -23,6 +23,28 @@ import { OrderService } from './order.service';
  */
 @Injectable()
 export class OrderActionsService {
+  /**
+   * Tên giao dịch trong hệ thống ta là `sale` (bán/thu tiền), nhưng API Haravan
+   * chỉ nhận `Pending | Authorize | Capture | Void | Refund` và trả
+   * `422 Loại giao dịch không hợp lệ` với `Sale` hoặc chữ thường.
+   * Vì vậy `sale` được map thành `Capture` ngay tại biên gọi API.
+   */
+  private static readonly HARAVAN_KIND: Record<string, string> = {
+    pending: 'Pending',
+    authorize: 'Authorize',
+    sale: 'Capture',
+    capture: 'Capture',
+    void: 'Void',
+    refund: 'Refund',
+  };
+
+  private static haravanKind(kind: string): string {
+    const normalized = String(kind ?? '')
+      .trim()
+      .toLowerCase();
+    return OrderActionsService.HARAVAN_KIND[normalized] ?? normalized;
+  }
+
   private readonly logger = new Logger(OrderActionsService.name);
 
   constructor(
@@ -71,8 +93,7 @@ export class OrderActionsService {
     if (params.restock !== undefined) requestBody['restock'] = params.restock;
     if (params.note) requestBody['note'] = params.note;
     if (params.ignoreCancelFulfillment !== undefined) {
-      requestBody['ignore_cancel_fulfillment'] =
-        params.ignoreCancelFulfillment;
+      requestBody['ignore_cancel_fulfillment'] = params.ignoreCancelFulfillment;
     }
 
     await this.audit.logAction(
@@ -468,12 +489,17 @@ export class OrderActionsService {
       throw new BadRequestException('Cần nhập số tiền hoàn tiền lớn hơn 0');
     }
 
-    const transaction: Record<string, unknown> = { kind: 'refund', amount };
+    const transaction: Record<string, unknown> = {
+      kind: OrderActionsService.haravanKind('refund'),
+      amount,
+    };
     if (params.gateway) transaction['gateway'] = params.gateway;
     if (params.note) transaction['note'] = params.note;
     if (params.parentId) transaction['parent_id'] = params.parentId;
 
-    const requestBody: Record<string, unknown> = { transactions: [transaction] };
+    const requestBody: Record<string, unknown> = {
+      transactions: [transaction],
+    };
     if (params.note) requestBody['note'] = params.note;
 
     await this.audit.logAction(
@@ -586,8 +612,27 @@ export class OrderActionsService {
   async listTransactions(
     orgId: number,
     haravanOrderId: number,
+    query: { fields?: string } = {},
   ): Promise<unknown> {
-    const res = await this.apiClient.listTransactions(orgId, haravanOrderId);
+    const res = await this.apiClient.listTransactions(orgId, haravanOrderId, {
+      fields: query.fields,
+    });
+    return res.body;
+  }
+
+  /** Chi tiết một giao dịch của đơn. */
+  async getTransaction(
+    orgId: number,
+    haravanOrderId: number,
+    transactionId: number,
+    query: { fields?: string } = {},
+  ): Promise<unknown> {
+    const res = await this.apiClient.getTransaction(
+      orgId,
+      haravanOrderId,
+      transactionId,
+      { fields: query.fields },
+    );
     return res.body;
   }
 
@@ -608,12 +653,17 @@ export class OrderActionsService {
     }
 
     const requestBody: Record<string, unknown> = {
-      kind,
-      amount: numericAmount,
+      // Haravan đòi bọc giao dịch trong key `transaction`; gửi thẳng `kind`
+      // sẽ bị `422 Dữ liệu không hợp lệ`.
+      transaction: {
+        kind: OrderActionsService.haravanKind(kind),
+        amount: numericAmount,
+      },
     };
-    if (params.gateway) requestBody['gateway'] = params.gateway;
-    if (params.parentId) requestBody['parent_id'] = params.parentId;
-    if (params.note) requestBody['note'] = params.note;
+    const transaction = requestBody['transaction'] as Record<string, unknown>;
+    if (params.gateway) transaction['gateway'] = params.gateway;
+    if (params.parentId) transaction['parent_id'] = params.parentId;
+    if (params.note) transaction['note'] = params.note;
 
     await this.audit.logAction(
       orgId,
@@ -631,5 +681,4 @@ export class OrderActionsService {
     await this.orders.mirrorOrderFromApi(orgId, haravanOrderId, res.body);
     return res.body;
   }
-  }
-
+}
