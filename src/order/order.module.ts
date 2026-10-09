@@ -9,6 +9,9 @@ import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
 import { OrderController } from './order.controller';
 import { OrderWorker } from './order.worker';
 import { OrderService } from './order.service';
+import { OrderActionsService } from './order-actions.service';
+import { OrderAuditService } from './order-audit.service';
+import { OrderQueryService } from './order-query.service';
 import {
   Order,
   OrderAction,
@@ -35,7 +38,13 @@ import { Customer, CustomerSchema } from './customer.entity';
     ]),
   ],
   controllers: [OrderController],
-  providers: [OrderService, OrderWorker],
-  exports: [OrderService],
+  providers: [
+    OrderService,
+    OrderQueryService,
+    OrderActionsService,
+    OrderAuditService,
+    OrderWorker,
+  ],
+  exports: [OrderService, OrderQueryService, OrderActionsService, OrderAuditService],
 })
 export class OrderModule {}

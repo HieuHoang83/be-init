@@ -14,6 +14,8 @@ import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { User } from '../decorators/customize';
 import { JobQueue } from '../queue/queue.service';
 import { OrderService } from './order.service';
+import { OrderActionsService } from './order-actions.service';
+import { OrderQueryService } from './order-query.service';
 import { extractOrder } from '../core/webhook-payload.util';
 import { JOB_NAMES } from '../queue/queue.service';
 import { WebhookPrivateService } from '../webhook-private/webhook-private.service';
@@ -68,6 +70,8 @@ function customerNamePrefixPattern(value: string): RegExp {
 export class OrderController {
   constructor(
     private readonly orderService: OrderService,
+    private readonly orderQuery: OrderQueryService,
+    private readonly orderActions: OrderActionsService,
     private readonly webhookService: WebhookPrivateService,
     private readonly jobQueue: JobQueue,
   ) {}
@@ -340,7 +344,7 @@ export class OrderController {
       filter['createdAt'] = createdAt;
     }
 
-    return this.orderService.findOrders(
+    return this.orderQuery.findOrders(
       filter,
       query.page ?? 1,
       query.limit ?? 20,
@@ -351,7 +355,7 @@ export class OrderController {
   @ApiOperation({ summary: 'Thong ke don hang' })
   async stats(@Query('orgId') orgId?: string) {
     const parsed = orgId ? Number(orgId) : undefined;
-    return this.orderService.getStats(
+    return this.orderQuery.getStats(
       Number.isFinite(parsed) ? (parsed as number) : undefined,
     );
   }
@@ -375,7 +379,7 @@ export class OrderController {
       );
     }
 
-    const events = await this.orderService.findEvents(
+    const events = await this.orderQuery.findEvents(
       orgId,
       haravanOrderId,
       100,
@@ -389,7 +393,7 @@ export class OrderController {
     @Param('orgId', ParseIntPipe) orgId: number,
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
   ) {
-    return this.orderService.findActions(orgId, haravanOrderId, 200);
+    return this.orderQuery.findActions(orgId, haravanOrderId, 200);
   }
 
   @Post(':orgId/create')
@@ -439,7 +443,7 @@ export class OrderController {
     @Body() body: CancelOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderService.cancelOrder({
+    const order = await this.orderActions.cancelOrder({
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
@@ -463,7 +467,7 @@ export class OrderController {
     @Body() body: CloseOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderService.closeOrder({
+    const order = await this.orderActions.closeOrder({
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
@@ -481,7 +485,7 @@ export class OrderController {
     @Body() body: OpenOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderService.openOrder({
+    const order = await this.orderActions.openOrder({
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
@@ -498,7 +502,7 @@ export class OrderController {
     @Body() body: UpdateOrderBody,
     @User() user?: { id?: number; email?: string },
   ) {
-    const order = await this.orderService.updateOrder({
+    const order = await this.orderActions.updateOrder({
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
@@ -518,7 +522,7 @@ export class OrderController {
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
     @Query() query: ListRefundsQuery,
   ) {
-    return this.orderService.listRefunds(
+    return this.orderActions.listRefunds(
       orgId,
       haravanOrderId,
       query.page ?? 1,
@@ -534,7 +538,7 @@ export class OrderController {
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
     @Param('refundId', ParseIntPipe) refundId: number,
   ) {
-    return this.orderService.getRefund(orgId, haravanOrderId, refundId);
+    return this.orderActions.getRefund(orgId, haravanOrderId, refundId);
   }
 
   /** Hoàn tiền cho đơn đã thu tiền. */
@@ -547,7 +551,7 @@ export class OrderController {
     @User() user?: { id?: number; email?: string },
   ) {
     const transaction = body?.transactions?.[0];
-    const order = await this.orderService.refundOrder({
+    const order = await this.orderActions.refundOrder({
       orgId,
       haravanOrderId,
       actor: body?.actor ?? user?.email ?? 'admin',
@@ -564,7 +568,7 @@ export class OrderController {
     @Param('orgId', ParseIntPipe) orgId: number,
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
   ) {
-    return this.orderService.listTransactions(orgId, haravanOrderId);
+    return this.orderActions.listTransactions(orgId, haravanOrderId);
   }
 
   @Post(':orgId/:haravanOrderId/transactions')
@@ -574,7 +578,7 @@ export class OrderController {
     @Param('haravanOrderId', ParseIntPipe) haravanOrderId: number,
     @Body() body: { amount: number; kind: string },
   ) {
-    const transaction = await this.orderService.createTransaction({
+    const transaction = await this.orderActions.createTransaction({
       orgId,
       haravanOrderId,
       amount: body?.amount ?? 0,

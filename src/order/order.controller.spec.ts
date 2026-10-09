@@ -2,12 +2,16 @@ import { BadRequestException } from '@nestjs/common';
 import { validateSync } from 'class-validator';
 import { OrderController } from './order.controller';
 import { OrderService } from './order.service';
+import { OrderActionsService } from './order-actions.service';
+import { OrderQueryService } from './order-query.service';
 import { ListOrdersQuery } from './dto/order.dto';
 
 describe('OrderController list confirmation filter', () => {
   const findOrders = jest.fn();
   const controller = new OrderController(
     { findOrders } as unknown as OrderService,
+    { findOrders } as unknown as OrderQueryService,
+    {} as unknown as OrderActionsService,
     {} as never,
     {} as never,
   );

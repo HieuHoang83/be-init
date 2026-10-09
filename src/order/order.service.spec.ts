@@ -2,6 +2,8 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
 import { OrderService } from './order.service';
+import { OrderAuditService } from './order-audit.service';
+import { OrderQueryService } from './order-query.service';
 import {
   Order,
   OrderAction,
@@ -18,6 +20,7 @@ import { ShopSettingsService } from '../shop-settings/shop-settings.service';
 
 describe('OrderService - evaluateConfirmEligibility', () => {
   let service: OrderService;
+  let queryService: OrderQueryService;
 
   const queryMock = (value: unknown) => ({
     exec: () => Promise.resolve(value),
@@ -113,6 +116,8 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       imports: [ConfigModule.forFeature(appConfig)],
       providers: [
         OrderService,
+        OrderAuditService,
+        OrderQueryService,
         { provide: ApiClient, useValue: apiMock },
         {
           provide: ShopSettingsService,
@@ -125,7 +130,9 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       ],
     }).compile();
 
-    return moduleRef.get(OrderService);
+    service = moduleRef.get(OrderService);
+    queryService = moduleRef.get(OrderQueryService);
+    return service;
   };
 
   beforeEach(() => {
@@ -603,7 +610,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
 
-      const result = await service.findOrders({}, 1, 20);
+      const result = await queryService.findOrders({}, 1, 20);
 
       expect(result.items[0]).toMatchObject({
         name: '#10015',
@@ -643,7 +650,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
 
-      const result = await service.findOrders({}, 1, 20);
+      const result = await queryService.findOrders({}, 1, 20);
 
       expect(result.items[0]).toMatchObject({
         name: '#10015',
@@ -682,7 +689,7 @@ describe('OrderService - evaluateConfirmEligibility', () => {
       orderModel.countDocuments.mockImplementation(() => queryMock(1));
       service = await makeService();
 
-      const result = await service.findOrders({}, 1, 20);
+      const result = await queryService.findOrders({}, 1, 20);
 
       expect(result.items[0]).toMatchObject({
         name: '#10016',

@@ -29,32 +29,23 @@ import {
   OrderStatus,
   SkipReason,
 } from './order.entity';
-
-export interface ConfirmDecision {
-  shouldConfirm: boolean;
-  isReturningCustomer: boolean;
-  priorOrderCount: number;
-  priorSpent: number;
-  skipReason: SkipReason;
-}
+import { ConfirmDecision, decideConfirm } from './order.rules';
+import { OrderAuditService } from './order-audit.service';
+import {
+  buildCustomerPatch,
+  changedOrderFields,
+  mergeOrderPayload,
+  normalizePhone,
+  resolveFullName,
+  resolveHaravanOrderStatus,
+  toProcessing,
+} from './order.mapper';
 
 export interface ProcessResult {
   order: OrderDocument;
   confirmed: boolean;
   decision: ConfirmDecision;
   actionLogId?: Types.ObjectId;
-}
-
-function mergeNonNull<T extends object>(
-  existing?: T | null,
-  incoming?: T | null,
-): T | undefined {
-  if (!existing && !incoming) return undefined;
-  const merged: Record<string, unknown> = { ...(existing ?? {}) };
-  for (const [key, value] of Object.entries(incoming ?? {})) {
-    if (value !== undefined && value !== null) merged[key] = value;
-  }
-  return merged as T;
 }
 
 export interface UpsertResult {
@@ -72,10 +63,7 @@ export class OrderService {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(Customer.name)
     private readonly customerModel: Model<CustomerDocument>,
-    @InjectModel(OrderAction.name)
-    private readonly actionModel: Model<OrderActionDocument>,
-    @InjectModel(OrderEvent.name)
-    private readonly eventModel: Model<OrderEventDocument>,
+    private readonly audit: OrderAuditService,
     private readonly apiClient: ApiClient,
     @Inject(appConfig.KEY) config: ConfigType<typeof appConfig>,
   ) {
@@ -294,7 +282,7 @@ export class OrderService {
       )
       .lean()
       .exec();
-    const effectivePayload = this.mergeOrderPayload(
+    const effectivePayload = mergeOrderPayload(
       existing?.payload,
       payload,
       source === 'api' && Boolean(existing),
@@ -343,7 +331,7 @@ export class OrderService {
         Object.prototype.hasOwnProperty.call(effectivePayload, field),
       )
     ) {
-      const haravanStatus = this.getHaravanOrderStatus(effectivePayload);
+      const haravanStatus = resolveHaravanOrderStatus(effectivePayload);
       if (haravanStatus !== null || lifecycleFields.some(hasField)) {
         update['haravanStatus'] = haravanStatus;
       }
@@ -386,7 +374,7 @@ export class OrderService {
     }
 
     for (const [field, value] of Object.entries(
-      this.buildCustomerPatch(effectivePayload, isOrderCreatedEvent),
+      buildCustomerPatch(effectivePayload, isOrderCreatedEvent),
     )) {
       if (value !== undefined) update[field] = value;
     }
@@ -399,12 +387,12 @@ export class OrderService {
       )
       .exec();
 
-    const changedFields = this.getChangedOrderFields(
+    const changedFields = changedOrderFields(
       existing,
       effectivePayload,
       update,
     );
-    await this.logOrderEvent({
+    await this.audit.logOrderEvent({
       orgId,
       haravanOrderId: payload.id,
       action: existing ? OrderEventAction.UPDATED : OrderEventAction.CREATED,
@@ -433,111 +421,6 @@ export class OrderService {
 
     return { created: true, order: doc };
   }
-
-  private mergeOrderPayload(
-    existing: OrderPayload | undefined,
-    incoming: OrderPayload,
-    preserveNulls = false,
-  ): OrderPayload {
-    return {
-      ...(preserveNulls ? mergeNonNull(existing, incoming) : { ...existing, ...incoming }),
-      ...(mergeNonNull(existing?.customer, incoming.customer)
-        ? { customer: mergeNonNull(existing?.customer, incoming.customer) }
-        : {}),
-      ...(mergeNonNull(existing?.shipping_address, incoming.shipping_address)
-        ? { shipping_address: mergeNonNull(existing?.shipping_address, incoming.shipping_address) }
-        : {}),
-      ...(mergeNonNull(existing?.billing_address, incoming.billing_address)
-        ? { billing_address: mergeNonNull(existing?.billing_address, incoming.billing_address) }
-        : {}),
-    };
-  }
-
-  /** Chỉ cập nhật các trường khách hàng có dữ liệu. */
-  private buildCustomerPatch(
-    payload: OrderPayload,
-    includeCreationSnapshot: boolean,
-  ): Record<string, unknown> {
-    const c = payload.customer;
-    if (!c) return {};
-
-    const fullName =
-      (payload.shipping_address?.name ?? '').trim() ||
-      [c.first_name, c.last_name].filter(Boolean).join(' ').trim() ||
-      undefined;
-
-    const patch: Record<string, unknown> = {};
-    const setCustomerFieldWhenPresent = (field: string, value: unknown) => {
-      if (value !== undefined && value !== null) patch[`customer.${field}`] = value;
-    };
-    setCustomerFieldWhenPresent('email', c.email?.toLowerCase());
-    setCustomerFieldWhenPresent(
-      'phone',
-      OrderService.normalizePhone(c.phone ?? payload.shipping_address?.phone),
-    );
-    setCustomerFieldWhenPresent('totalSpent', c.total_spent);
-    setCustomerFieldWhenPresent('totalPaid', c.total_paid);
-    setCustomerFieldWhenPresent('state', c.state);
-    setCustomerFieldWhenPresent('verifiedEmail', c.verified_email);
-    setCustomerFieldWhenPresent('lastOrderId', c.last_order_id);
-    setCustomerFieldWhenPresent('lastOrderName', c.last_order_name);
-    if (includeCreationSnapshot && c.orders_count != null) {
-      patch['customer.ordersCount'] = c.orders_count;
-    }
-
-    if (c.first_name) patch['customer.firstName'] = c.first_name;
-    if (c.last_name) patch['customer.lastName'] = c.last_name;
-    if (fullName) patch['customer.fullName'] = fullName;
-    if (c.id) patch['customer.haravanId'] = c.id;
-
-    const orderPhone = OrderService.normalizePhone(
-      c.phone ?? payload.shipping_address?.phone,
-    );
-    if (orderPhone) patch['phone'] = orderPhone;
-    if (c.email) patch['email'] = c.email.toLowerCase();
-    if (fullName) patch['customerName'] = fullName;
-
-    return patch;
-  }
-
-  private getHaravanOrderStatus(
-    payload: OrderPayload,
-  ): 'open' | 'closed' | 'cancelled' | null {
-    const status = payload.status?.toLowerCase();
-    if (status === 'open' || status === 'closed' || status === 'cancelled') {
-      return status;
-    }
-    const cancelledStatus = payload.cancelled_status?.toLowerCase();
-    if (
-      cancelledStatus === 'cancelled' ||
-      cancelledStatus === 'true' ||
-      payload.cancelled_at
-    ) {
-      return 'cancelled';
-    }
-    const closedStatus = payload.closed_status?.toLowerCase();
-    if (
-      closedStatus === 'closed' ||
-      closedStatus === 'true' ||
-      payload.closed_at
-    ) {
-      return 'closed';
-    }
-    if (cancelledStatus === 'uncancelled' && closedStatus === 'unclosed') {
-      return 'open';
-    }
-    return null;
-  }
-
-  /** Chuẩn hóa số điện thoại để so khớp khách hàng. */
-  private static normalizePhone(raw?: string | null): string | undefined {
-    if (!raw) return undefined;
-    const digits = String(raw).replace(/\D/g, '');
-    if (!digits) return undefined;
-    const local = digits.replace(/^84/, '0').replace(/^0+/, '0');
-    return local.length >= 9 && local.length <= 15 ? local : undefined;
-  }
-
   /** Lưu hoặc cập nhật khách khi có ID, số điện thoại hoặc email. */
   async upsertCustomer(
     orgId: number,
@@ -549,7 +432,7 @@ export class OrderService {
     const c = payload.customer;
     if (!c) return;
 
-    const phone = OrderService.normalizePhone(
+    const phone = normalizePhone(
       c.phone ?? payload.shipping_address?.phone,
     );
     const email = c.email?.trim().toLowerCase() || undefined;
@@ -662,8 +545,8 @@ export class OrderService {
     }
 
     const phone =
-      OrderService.normalizePhone(cust?.phone) ??
-      OrderService.normalizePhone(order.phone);
+      normalizePhone(cust?.phone) ??
+      normalizePhone(order.phone);
     const email = (cust?.email ?? order.email)?.trim().toLowerCase();
 
     const or: Record<string, unknown>[] = [];
@@ -697,73 +580,29 @@ export class OrderService {
     orgId: number,
     order: OrderDocument,
   ): Promise<ConfirmDecision> {
-    const skip = (reason: SkipReason, priorOrderCount = 0, priorSpent = 0) => ({
-      shouldConfirm: false,
-      isReturningCustomer: false,
-      priorOrderCount,
-      priorSpent,
-      skipReason: reason,
+    const hasCustomerIdentity = hasRealCustomerIdentity({
+      haravanId: order.customer?.haravanId,
+      email: order.customer?.email ?? order.email,
+      phone: order.customer?.phone ?? order.phone,
+      fullName: order.customer?.fullName ?? order.customerName,
     });
-
-    if (
-      !hasRealCustomerIdentity({
-        haravanId: order.customer?.haravanId,
-        email: order.customer?.email ?? order.email,
-        phone: order.customer?.phone ?? order.phone,
-        fullName: order.customer?.fullName ?? order.customerName,
-      })
-    ) {
-      return skip(SkipReason.NO_CUSTOMER);
-    }
-
-    if (
-      order.cancelledStatus === 'cancelled' ||
-      order.closedStatus === 'closed'
-    ) {
-      return skip(SkipReason.ORDER_CANCELLED);
-    }
-
-    if (order.payload?.confirmed_status?.toLowerCase() === 'confirmed') {
-      return skip(SkipReason.ALREADY_CONFIRMED);
-    }
 
     const { priorOrderCount, priorSpent } = await this.countPriorOrders(
       orgId,
       order,
     );
 
-    const isReturningCustomer = priorOrderCount >= this.rule.minPriorOrders;
-
-    if (priorOrderCount < this.rule.minPriorOrders) {
-      return {
-        shouldConfirm: false,
-        isReturningCustomer: false,
-        priorOrderCount,
-        priorSpent,
-        skipReason:
-          priorOrderCount === 0
-            ? SkipReason.FIRST_TIME_BUYER
-            : SkipReason.NOT_ENOUGH_PRIOR_ORDERS,
-      };
-    }
-
-    if (this.rule.minPriorSpent > 0 && priorSpent < this.rule.minPriorSpent) {
-      return {
-        shouldConfirm: false,
-        isReturningCustomer: true,
-        priorOrderCount,
-        priorSpent,
-        skipReason: SkipReason.NOT_ENOUGH_PRIOR_SPENT,
-      };
-    }
-
-    return {
-      shouldConfirm: true,
-      isReturningCustomer: true,
+    return decideConfirm({
+      hasCustomerIdentity,
+      isCancelledOrClosed:
+        order.cancelledStatus === 'cancelled' ||
+        order.closedStatus === 'closed',
+      isAlreadyConfirmed:
+        order.payload?.confirmed_status?.toLowerCase() === 'confirmed',
       priorOrderCount,
       priorSpent,
-      skipReason: SkipReason.NONE,
-    };
+      rule: this.rule,
+    });
   }
 
   /** Lưu đơn, kiểm tra rule và xác nhận nếu đủ điều kiện. */
@@ -784,7 +623,7 @@ export class OrderService {
 
     const decision = await this.evaluateConfirmEligibility(orgId, order);
 
-    await this.logAction(
+    await this.audit.logAction(
       orgId,
       payload.id,
       ActionType.EVALUATE,
@@ -879,7 +718,7 @@ export class OrderService {
       await order.save();
 
       if (manual) {
-        await this.logOrderEvent({
+        await this.audit.logOrderEvent({
           orgId,
           haravanOrderId,
           action: OrderEventAction.CONFIRM_FAILED,
@@ -890,7 +729,7 @@ export class OrderService {
         });
       }
 
-      await this.logAction(
+      await this.audit.logAction(
         orgId,
         haravanOrderId,
         ActionType.CONFIRM_FAILED,
@@ -901,7 +740,7 @@ export class OrderService {
       return { order, confirmed: false, decision };
     }
 
-    await this.logAction(
+    await this.audit.logAction(
       orgId,
       haravanOrderId,
       ActionType.CONFIRM_SEND,
@@ -922,7 +761,7 @@ export class OrderService {
       await order.save();
 
       if (manual) {
-        await this.logOrderEvent({
+        await this.audit.logOrderEvent({
           orgId,
           haravanOrderId,
           action: OrderEventAction.CONFIRM_REQUESTED,
@@ -934,7 +773,7 @@ export class OrderService {
         });
       }
 
-      const actionLogId = await this.logAction(
+      const actionLogId = await this.audit.logAction(
         orgId,
         haravanOrderId,
         ActionType.CONFIRM_SUCCESS,
@@ -971,7 +810,7 @@ export class OrderService {
       await order.save();
 
       if (manual) {
-        await this.logOrderEvent({
+        await this.audit.logOrderEvent({
           orgId,
           haravanOrderId,
           action: OrderEventAction.CONFIRM_FAILED,
@@ -982,7 +821,7 @@ export class OrderService {
         });
       }
 
-      await this.logAction(
+      await this.audit.logAction(
         orgId,
         haravanOrderId,
         ActionType.CONFIRM_FAILED,
@@ -1005,11 +844,20 @@ export class OrderService {
   }
 
   /** Lấy đơn từ API nếu không còn payload webhook. */
+  async fetchOrderFromApi(
+
+    orgId: number,
+    haravanOrderId: number,
+  ): Promise<OrderPayload> {
+    const res = await this.apiClient.getOrder(orgId, haravanOrderId);
+    return res.body;
+  }
+
   /**
-   * Gọi Haravan rồi đồng bộ lại bản ghi đơn nếu response trả về payload đơn.
-   * Trả về null khi Haravan không trả payload (khi đó caller tự cập nhật doc).
+   * Đồng bộ lại bản ghi đơn khi response của Haravan có trả payload đơn.
+   * Trả về null khi response không chứa payload (khi đó caller tự cập nhật doc).
    */
-  private async mirrorOrderFromApi(
+  async mirrorOrderFromApi(
     orgId: number,
     haravanOrderId: number,
     body: unknown,
@@ -1024,954 +872,12 @@ export class OrderService {
     return result.order;
   }
 
-  private async requireOrderDocument(
-    orgId: number,
-    haravanOrderId: number,
-  ): Promise<OrderDocument> {
-    const order = await this.findOrderById(orgId, haravanOrderId);
-    if (!order) {
-      throw new NotFoundException(
-        `Khong tim thay don ${haravanOrderId} cua org ${orgId}`,
-      );
-    }
-    return order;
-  }
-
-  /**
-   * Hủy đơn trên Haravan. `amount` là số tiền hoàn lại (bỏ trống = hoàn toàn bộ),
-   * `refund` chỉ ghi nhận hoàn tiền khi đơn đã capture, `restock` trả lại tồn kho.
-   */
-  async cancelOrder(params: {
-    orgId: number;
-    haravanOrderId: number;
-    actor?: string;
-    amount?: number;
-    email?: string;
-    reason?: string;
-    refund?: boolean;
-    restock?: boolean;
-    note?: string;
-    ignoreCancelFulfillment?: boolean;
-  }): Promise<OrderDocument> {
-    const { orgId, haravanOrderId, actor } = params;
-    const order = await this.requireOrderDocument(orgId, haravanOrderId);
-
-    const requestBody: Record<string, unknown> = {};
-    if (params.amount !== undefined) requestBody['amount'] = params.amount;
-    if (params.email) requestBody['email'] = params.email;
-    if (params.reason) requestBody['reason'] = params.reason;
-    if (params.refund !== undefined) requestBody['refund'] = params.refund;
-    if (params.restock !== undefined) requestBody['restock'] = params.restock;
-    if (params.note) requestBody['note'] = params.note;
-    if (params.ignoreCancelFulfillment !== undefined) {
-      requestBody['ignore_cancel_fulfillment'] =
-        params.ignoreCancelFulfillment;
-    }
-
-    await this.logAction(
-      orgId,
-      haravanOrderId,
-      ActionType.CANCEL_SEND,
-      ActionResult.SUCCESS,
-      { manual: true, actor, message: params.reason ?? params.note },
-    );
-
-    const startedAt = Date.now();
-    try {
-      const res = await this.apiClient.cancelOrder(
-        orgId,
-        haravanOrderId,
-        requestBody,
-      );
-
-      const mirrored = await this.mirrorOrderFromApi(
-        orgId,
-        haravanOrderId,
-        res.body,
-      );
-      const updated = mirrored ?? order;
-      if (!mirrored) {
-        updated.status = OrderStatus.CANCELLED;
-        updated.haravanStatus = 'cancelled';
-        updated.cancelledStatus = 'cancelled';
-        updated.cancelReason = params.reason ?? updated.cancelReason;
-        await updated.save();
-      }
-
-      await this.logOrderEvent({
-        orgId,
-        haravanOrderId,
-        action: OrderEventAction.CANCELLED,
-        source: 'user',
-        actor,
-        changedFields: ['status', 'haravanStatus', 'cancelledStatus'],
-        description: 'Da huy don hang.',
-      });
-
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.CANCEL_SUCCESS,
-        ActionResult.SUCCESS,
-        {
-          manual: true,
-          actor,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/cancel.json`,
-            requestBody,
-            statusCode: res.statusCode,
-            responseBody: res.body as Record<string, unknown>,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-
-      this.logger.log(
-        `Da huy don ${haravanOrderId} (org ${orgId}) tren Haravan`,
-      );
-      return updated;
-    } catch (error) {
-      const message = (error as Error).message;
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.CANCEL_FAILED,
-        ActionResult.FAILED,
-        {
-          manual: true,
-          actor,
-          message,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/cancel.json`,
-            requestBody,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-      this.logger.error(`Huy don ${haravanOrderId} that bai: ${message}`);
-      throw error;
-    }
-  }
-
-  /** Đóng đơn trên Haravan. */
-  async closeOrder(params: {
-    orgId: number;
-    haravanOrderId: number;
-    actor?: string;
-    note?: string;
-  }): Promise<OrderDocument> {
-    const { orgId, haravanOrderId, actor } = params;
-    const order = await this.requireOrderDocument(orgId, haravanOrderId);
-    const requestBody: Record<string, unknown> = {};
-    if (params.note) requestBody['note'] = params.note;
-
-    await this.logAction(
-      orgId,
-      haravanOrderId,
-      ActionType.CLOSE_SEND,
-      ActionResult.SUCCESS,
-      { manual: true, actor, message: params.note },
-    );
-
-    const startedAt = Date.now();
-    try {
-      const res = await this.apiClient.closeOrder(
-        orgId,
-        haravanOrderId,
-        requestBody,
-      );
-
-      const mirrored = await this.mirrorOrderFromApi(
-        orgId,
-        haravanOrderId,
-        res.body,
-      );
-      const updated = mirrored ?? order;
-      if (!mirrored) {
-        updated.haravanStatus = 'closed';
-        updated.closedStatus = 'closed';
-        await updated.save();
-      }
-
-      await this.logOrderEvent({
-        orgId,
-        haravanOrderId,
-        action: OrderEventAction.CLOSED,
-        source: 'user',
-        actor,
-        changedFields: ['haravanStatus', 'closedStatus'],
-        description: 'Da dong don hang tren Haravan.',
-      });
-
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.CLOSE_SUCCESS,
-        ActionResult.SUCCESS,
-        {
-          manual: true,
-          actor,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/close.json`,
-            requestBody,
-            statusCode: res.statusCode,
-            responseBody: res.body as Record<string, unknown>,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-
-      this.logger.log(`Da dong don ${haravanOrderId} (org ${orgId})`);
-      return updated;
-    } catch (error) {
-      const message = (error as Error).message;
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.CLOSE_FAILED,
-        ActionResult.FAILED,
-        {
-          manual: true,
-          actor,
-          message,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/close.json`,
-            requestBody,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-      this.logger.error(`Dong don ${haravanOrderId} that bai: ${message}`);
-      throw error;
-    }
-  }
-
-  /** Mở lại đơn đã đóng. */
-  async openOrder(params: {
-    orgId: number;
-    haravanOrderId: number;
-    actor?: string;
-  }): Promise<OrderDocument> {
-    const { orgId, haravanOrderId, actor } = params;
-    const order = await this.requireOrderDocument(orgId, haravanOrderId);
-
-    await this.logAction(
-      orgId,
-      haravanOrderId,
-      ActionType.OPEN_SEND,
-      ActionResult.SUCCESS,
-      { manual: true, actor },
-    );
-
-    const startedAt = Date.now();
-    try {
-      const res = await this.apiClient.openOrder(orgId, haravanOrderId);
-
-      const mirrored = await this.mirrorOrderFromApi(
-        orgId,
-        haravanOrderId,
-        res.body,
-      );
-      const updated = mirrored ?? order;
-      if (!mirrored) {
-        updated.haravanStatus = 'open';
-        updated.closedStatus = 'unclosed';
-        await updated.save();
-      }
-
-      await this.logOrderEvent({
-        orgId,
-        haravanOrderId,
-        action: OrderEventAction.OPENED,
-        source: 'user',
-        actor,
-        changedFields: ['haravanStatus', 'closedStatus'],
-        description: 'Da mo lai don hang da dong.',
-      });
-
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.OPEN_SUCCESS,
-        ActionResult.SUCCESS,
-        {
-          manual: true,
-          actor,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/open.json`,
-            statusCode: res.statusCode,
-            responseBody: res.body as Record<string, unknown>,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-
-      this.logger.log(`Da mo lai don ${haravanOrderId} (org ${orgId})`);
-      return updated;
-    } catch (error) {
-      const message = (error as Error).message;
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.OPEN_FAILED,
-        ActionResult.FAILED,
-        {
-          manual: true,
-          actor,
-          message,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/open.json`,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-      this.logger.error(`Mo don ${haravanOrderId} that bai: ${message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Cập nhật thông tin đơn. Haravan không cho sửa line_items / số lượng /
-   * financial_status nên chỉ gửi các trường an toàn (note, note_attributes,
-   * email, phone).
-   */
-  async updateOrder(params: {
-    orgId: number;
-    haravanOrderId: number;
-    actor?: string;
-    note?: string;
-    noteAttributes?: { name: string; value: string }[];
-    email?: string;
-    phone?: string;
-  }): Promise<OrderDocument> {
-    const { orgId, haravanOrderId, actor } = params;
-    const order = await this.requireOrderDocument(orgId, haravanOrderId);
-
-    const requestBody: Record<string, unknown> = {};
-    if (params.note !== undefined) requestBody['note'] = params.note;
-    if (params.noteAttributes !== undefined) {
-      requestBody['note_attributes'] = params.noteAttributes;
-    }
-    if (params.email !== undefined) requestBody['email'] = params.email;
-    if (params.phone !== undefined) requestBody['phone'] = params.phone;
-
-    if (!Object.keys(requestBody).length) {
-      throw new BadRequestException('Khong co truong nao de cap nhat don hang');
-    }
-
-    await this.logAction(
-      orgId,
-      haravanOrderId,
-      ActionType.UPDATE_SEND,
-      ActionResult.SUCCESS,
-      { manual: true, actor },
-    );
-
-    const startedAt = Date.now();
-    try {
-      const res = await this.apiClient.updateOrder(
-        orgId,
-        haravanOrderId,
-        requestBody,
-      );
-
-      const mirrored = await this.mirrorOrderFromApi(
-        orgId,
-        haravanOrderId,
-        res.body,
-      );
-      const updated = mirrored ?? order;
-
-      await this.logOrderEvent({
-        orgId,
-        haravanOrderId,
-        action: OrderEventAction.UPDATED,
-        source: 'user',
-        actor,
-        changedFields: Object.keys(requestBody),
-        description: 'Da cap nhat thong tin don hang tren Haravan.',
-      });
-
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.UPDATE_SUCCESS,
-        ActionResult.SUCCESS,
-        {
-          manual: true,
-          actor,
-          apiCall: {
-            method: 'PUT',
-            url: `/orders/${haravanOrderId}.json`,
-            requestBody,
-            statusCode: res.statusCode,
-            responseBody: res.body as Record<string, unknown>,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-
-      this.logger.log(`Da cap nhat don ${haravanOrderId} (org ${orgId})`);
-      return updated;
-    } catch (error) {
-      const message = (error as Error).message;
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.UPDATE_FAILED,
-        ActionResult.FAILED,
-        {
-          manual: true,
-          actor,
-          message,
-          apiCall: {
-            method: 'PUT',
-            url: `/orders/${haravanOrderId}.json`,
-            requestBody,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-      this.logger.error(`Cap nhat don ${haravanOrderId} that bai: ${message}`);
-      throw error;
-    }
-  }
-
-  /** Hoàn tiền cho đơn đã thanh toán. */
-  async refundOrder(params: {
-    orgId: number;
-    haravanOrderId: number;
-    actor?: string;
-    amount?: number;
-    gateway?: string;
-    note?: string;
-    parentId?: number;
-  }): Promise<OrderDocument> {
-    const { orgId, haravanOrderId, actor } = params;
-    const order = await this.requireOrderDocument(orgId, haravanOrderId);
-
-    const amount = Number(params.amount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      throw new BadRequestException('Can nhap so tien hoan tien lon hon 0');
-    }
-
-    const transaction: Record<string, unknown> = { kind: 'refund', amount };
-    if (params.gateway) transaction['gateway'] = params.gateway;
-    if (params.note) transaction['note'] = params.note;
-    if (params.parentId) transaction['parent_id'] = params.parentId;
-
-    const requestBody: Record<string, unknown> = { transactions: [transaction] };
-    if (params.note) requestBody['note'] = params.note;
-
-    await this.logAction(
-      orgId,
-      haravanOrderId,
-      ActionType.REFUND_SEND,
-      ActionResult.SUCCESS,
-      { manual: true, actor, message: params.note },
-    );
-
-    const startedAt = Date.now();
-    try {
-      const res = await this.apiClient.createRefund(
-        orgId,
-        haravanOrderId,
-        requestBody,
-      );
-
-      const mirrored = await this.mirrorOrderFromApi(
-        orgId,
-        haravanOrderId,
-        res.body,
-      );
-      const updated = mirrored ?? order;
-
-      await this.logOrderEvent({
-        orgId,
-        haravanOrderId,
-        action: OrderEventAction.REFUNDED,
-        source: 'user',
-        actor,
-        changedFields: ['financialStatus'],
-        description: 'Da hoan tien don hang tren Haravan.',
-      });
-
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.REFUND_SUCCESS,
-        ActionResult.SUCCESS,
-        {
-          manual: true,
-          actor,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/refunds.json`,
-            requestBody,
-            statusCode: res.statusCode,
-            responseBody: res.body as Record<string, unknown>,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-
-      this.logger.log(
-        `Da hoan tien don ${haravanOrderId} (org ${orgId}), so tien ${amount}`,
-      );
-      return updated;
-    } catch (error) {
-      const message = (error as Error).message;
-      await this.logAction(
-        orgId,
-        haravanOrderId,
-        ActionType.REFUND_FAILED,
-        ActionResult.FAILED,
-        {
-          manual: true,
-          actor,
-          message,
-          apiCall: {
-            method: 'POST',
-            url: `/orders/${haravanOrderId}/refunds.json`,
-            requestBody,
-            durationMs: Date.now() - startedAt,
-          },
-        },
-      );
-      this.logger.error(`Hoan tien don ${haravanOrderId} that bai: ${message}`);
-      throw error;
-    }
-  }
-
-  /** Danh sách giao dịch hoàn tiền của đơn. */
-  async listRefunds(
-    orgId: number,
-    haravanOrderId: number,
-    page = 1,
-    limit = 20,
-  ): Promise<unknown> {
-    const res = await this.apiClient.listRefunds(
-      orgId,
-      haravanOrderId,
-      page,
-      limit,
-    );
-    return res.body;
-  }
-
-  /** Chi tiết một giao dịch hoàn tiền. */
-  async getRefund(
-    orgId: number,
-    haravanOrderId: number,
-    refundId: number,
-  ): Promise<unknown> {
-    const res = await this.apiClient.getRefund(orgId, haravanOrderId, refundId);
-    return res.body;
-  }
-
-  /** Danh sách giao dịch của đơn. */
-  async listTransactions(
-    orgId: number,
-    haravanOrderId: number,
-  ): Promise<unknown> {
-    const res = await this.apiClient.listTransactions(orgId, haravanOrderId);
-    return res.body;
-  }
-
-  /** Tạo giao dịch (thanh toán) cho đơn. */
-  async createTransaction(params: {
-    orgId: number;
-    haravanOrderId: number;
-    amount: number;
-    kind: string;
-    gateway?: string;
-    parentId?: number;
-    note?: string;
-  }): Promise<unknown> {
-    const { orgId, haravanOrderId, amount, kind } = params;
-    const numericAmount = Number(amount);
-    if (!Number.isFinite(numericAmount) || numericAmount < 0) {
-      throw new BadRequestException('So tien giao dich khong hop le');
-    }
-
-    const requestBody: Record<string, unknown> = {
-      kind,
-      amount: numericAmount,
-    };
-    if (params.gateway) requestBody['gateway'] = params.gateway;
-    if (params.parentId) requestBody['parent_id'] = params.parentId;
-    if (params.note) requestBody['note'] = params.note;
-
-    await this.logAction(
-      orgId,
-      haravanOrderId,
-      ActionType.REFUND_SEND,
-      ActionResult.SUCCESS,
-      { manual: true, message: `transaction ${kind} ${numericAmount}` },
-    );
-
-    const res = await this.apiClient.createTransaction(
-      orgId,
-      haravanOrderId,
-      requestBody,
-    );
-    await this.mirrorOrderFromApi(orgId, haravanOrderId, res.body);
-    return res.body;
-  }
-
-  async fetchOrderFromApi(
-    orgId: number,
-    haravanOrderId: number,
-  ): Promise<OrderPayload> {
-    const res = await this.apiClient.getOrder(orgId, haravanOrderId);
-    return res.body;
-  }
-
   async findOrderById(
     orgId: number,
     haravanOrderId: number,
   ): Promise<OrderDocument | null> {
     return this.orderModel.findOne({ orgId, haravanOrderId }).exec();
   }
-
-  async findOrders(
-    filter: Record<string, unknown>,
-    page = 1,
-    limit = 20,
-  ): Promise<{ items: unknown[]; total: number; page: number; limit: number }> {
-    const skip = (Math.max(page, 1) - 1) * limit;
-
-    const [items, total] = await Promise.all([
-      this.orderModel
-        .find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Math.min(limit, 100))
-        .exec(),
-      this.orderModel.countDocuments(filter).exec(),
-    ]);
-
-    const rows = await this.attachCustomerHistory(items);
-
-    return { items: rows, total, page, limit };
-  }
-
-  /** Bổ sung tên đơn và lịch sử mua của khách vào danh sách. */
-  private async attachCustomerHistory(
-    items: OrderDocument[],
-  ): Promise<unknown[]> {
-    if (!items.length) return [];
-
-    return Promise.all(
-      items.map(async (order) => {
-        const doc = order.toObject() as unknown as Record<string, unknown>;
-        const processing = (doc['processing'] ?? {}) as Record<string, unknown>;
-        const hasCustomerIdentity = hasRealCustomerIdentity({
-          haravanId: order.customer?.haravanId,
-          email: order.customer?.email ?? order.email,
-          phone: order.customer?.phone ?? order.phone,
-          fullName: order.customer?.fullName ?? order.customerName,
-        });
-        const name =
-          order.orderName ?? order.orderNumber ?? String(order.haravanOrderId);
-        const payloadOrderNumber = Number(order.customer?.ordersCount);
-
-        if (typeof processing['isReturningCustomer'] === 'boolean') {
-          const priorOrderCount = Number(processing['priorOrderCount'] ?? 0);
-          return {
-            ...doc,
-            name,
-            isReturningCustomer: processing['isReturningCustomer'],
-            priorOrderCount,
-            priorSpent: processing['priorSpent'] ?? 0,
-            customerOrderNumber: !hasCustomerIdentity
-              ? null
-              : Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
-              ? payloadOrderNumber
-              : priorOrderCount + 1,
-          };
-        }
-
-        const { priorOrderCount } = await this.countPriorOrders(
-          order.orgId,
-          order,
-        );
-        const isReturning = priorOrderCount > 0;
-
-        return {
-          ...doc,
-          name,
-          isReturningCustomer: isReturning,
-          priorOrderCount,
-          priorSpent: processing['priorSpent'] ?? 0,
-          customerOrderNumber: !hasCustomerIdentity
-            ? null
-            : Number.isInteger(payloadOrderNumber) && payloadOrderNumber > 0
-            ? payloadOrderNumber
-            : priorOrderCount + 1,
-        };
-      }),
-    );
-  }
-
-  async findActions(
-    orgId: number,
-    haravanOrderId: number,
-    limit = 100,
-  ): Promise<unknown[]> {
-    return this.actionModel
-      .find({ orgId, haravanOrderId })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .exec();
-  }
-
-  async findEvents(
-    orgId: number,
-    haravanOrderId: number,
-    limit = 100,
-  ): Promise<OrderEventDocument[]> {
-    return this.eventModel
-      .find({ orgId, haravanOrderId })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .exec();
-  }
-
-  async getStats(orgId?: number): Promise<Record<string, unknown>> {
-    const match = orgId ? { orgId } : {};
-
-    const [byStatus] = await this.orderModel.aggregate([
-      { $match: match },
-      { $group: { _id: '$status', count: { $sum: 1 } } },
-    ]);
-
-    const [totals] = await this.orderModel.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id: null,
-          totalOrders: { $sum: 1 },
-          totalRevenue: { $sum: '$totalPrice' },
-          confirmedRevenue: {
-            $sum: {
-              $cond: [
-                { $eq: ['$status', OrderStatus.CONFIRMED] },
-                '$totalPrice',
-                0,
-              ],
-            },
-          },
-        },
-      },
-    ]);
-
-    return {
-      byStatus: byStatus ?? {},
-      totalOrders: totals?.totalOrders ?? 0,
-      totalRevenue: totals?.totalRevenue ?? 0,
-      confirmedRevenue: totals?.confirmedRevenue ?? 0,
-    };
-  }
-
-  private async logAction(
-    orgId: number,
-    haravanOrderId: number,
-    type: ActionType,
-    result: ActionResult,
-    extra: {
-      manual?: boolean;
-      actor?: string;
-      reason?: SkipReason;
-      message?: string;
-      attempt?: number;
-      apiCall?: Record<string, unknown>;
-    } = {},
-  ): Promise<Types.ObjectId> {
-    const doc = await this.actionModel.create({
-      orgId,
-      haravanOrderId,
-      type,
-      result,
-      manual: extra.manual ?? false,
-      actor: extra.actor,
-      reason: extra.reason,
-      message: extra.message,
-      attempt: extra.attempt ?? 1,
-      apiCall: extra.apiCall,
-    });
-    return doc._id;
-  }
-
-  private async logOrderEvent(event: {
-    orgId: number;
-    haravanOrderId: number;
-    action: OrderEventAction;
-    source: OrderEventSource;
-    description: string;
-    changedFields?: string[];
-    actor?: string;
-    topic?: string;
-  }): Promise<void> {
-    await this.eventModel.create({
-      ...event,
-      changedFields: event.changedFields ?? [],
-    });
-  }
-
-  private getChangedOrderFields(
-    existing: Record<string, unknown> | null,
-    payload: OrderPayload,
-    update: Record<string, unknown>,
-  ): string[] {
-    const previousPayload = (existing?.['payload'] ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const fields: Array<{
-      label: string;
-      current: unknown;
-      previous: unknown;
-    }> = [
-      {
-        label: 'status',
-        current: update['status'],
-        previous: existing?.['status'],
-      },
-      {
-        label: 'orderName',
-        current: update['orderName'],
-        previous: existing?.['orderName'],
-      },
-      {
-        label: 'orderNumber',
-        current: update['orderNumber'],
-        previous: existing?.['orderNumber'],
-      },
-      {
-        label: 'customerName',
-        current: update['customerName'],
-        previous: existing?.['customerName'],
-      },
-      {
-        label: 'email',
-        current: update['email'],
-        previous: existing?.['email'],
-      },
-      {
-        label: 'phone',
-        current: update['phone'],
-        previous: existing?.['phone'],
-      },
-      {
-        label: 'financialStatus',
-        current: update['financialStatus'],
-        previous: existing?.['financialStatus'],
-      },
-      {
-        label: 'fulfillmentStatus',
-        current: update['fulfillmentStatus'],
-        previous: existing?.['fulfillmentStatus'],
-      },
-      {
-        label: 'confirmedStatus',
-        current: update['confirmedStatus'],
-        previous: existing?.['confirmedStatus'],
-      },
-      {
-        label: 'haravanStatus',
-        current: update['haravanStatus'],
-        previous: existing?.['haravanStatus'],
-      },
-      {
-        label: 'gateway',
-        current: update['gateway'],
-        previous: existing?.['gateway'],
-      },
-      {
-        label: 'sourceName',
-        current: update['sourceName'],
-        previous: existing?.['sourceName'],
-      },
-      {
-        label: 'totalPrice',
-        current: update['totalPrice'],
-        previous: existing?.['totalPrice'],
-      },
-      {
-        label: 'subtotalPrice',
-        current: update['subtotalPrice'],
-        previous: existing?.['subtotalPrice'],
-      },
-      {
-        label: 'totalTax',
-        current: update['totalTax'],
-        previous: existing?.['totalTax'],
-      },
-      {
-        label: 'totalDiscounts',
-        current: update['totalDiscounts'],
-        previous: existing?.['totalDiscounts'],
-      },
-      {
-        label: 'itemCount',
-        current: update['itemCount'],
-        previous: existing?.['itemCount'],
-      },
-      {
-        label: 'lineItems',
-        current: update['lineItems'],
-        previous: existing?.['lineItems'],
-      },
-      {
-        label: 'shippingAddress',
-        current: update['shippingAddress'],
-        previous: existing?.['shippingAddress'],
-      },
-      {
-        label: 'billingAddress',
-        current: update['billingAddress'],
-        previous: existing?.['billingAddress'],
-      },
-      {
-        label: 'note',
-        current: payload.note,
-        previous: previousPayload['note'],
-      },
-      {
-        label: 'discount_codes',
-        current: payload.discount_codes,
-        previous: previousPayload['discount_codes'],
-      },
-      {
-        label: 'discount_applications',
-        current: payload.discount_applications,
-        previous: previousPayload['discount_applications'],
-      },
-      {
-        label: 'note_attributes',
-        current: payload.note_attributes,
-        previous: previousPayload['note_attributes'],
-      },
-    ];
-
-    return fields
-      .filter(({ current, previous }) => {
-        if (current === undefined) return false;
-        return (
-          !existing ||
-          JSON.stringify(current ?? null) !== JSON.stringify(previous ?? null)
-        );
-      })
-      .map(({ label }) => label);
-  }
-
   /** Tìm đơn để chạy lại webhook lỗi. */
   async requireOrder(
     orgId: number,
@@ -1985,13 +891,4 @@ export class OrderService {
     }
     return order;
   }
-}
-
-function toProcessing(decision: ConfirmDecision) {
-  return {
-    reason: decision.skipReason,
-    isReturningCustomer: decision.isReturningCustomer,
-    priorOrderCount: decision.priorOrderCount,
-    priorSpent: decision.priorSpent,
-  };
 }
