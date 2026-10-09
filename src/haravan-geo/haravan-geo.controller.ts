@@ -1,7 +1,7 @@
 import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ListHaravanGeoQuery } from './dto/geo.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanGeoService } from './haravan-geo.service';
 
 /**
  * Proxy danh muc dia ly Haravan (quoc gia / tinh / quan / phuong).
@@ -18,7 +18,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId')
 export class HaravanGeoController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanGeoService) {}
 
   @Get('countries')
   @ApiOperation({ summary: 'Danh sach quoc gia (GET /com/countries.json)' })

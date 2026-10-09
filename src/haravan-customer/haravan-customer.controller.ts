@@ -17,7 +17,7 @@ import {
   ListHaravanCustomersQuery,
   SearchHaravanCustomersQuery,
 } from './dto/customer.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanCustomerService } from './haravan-customer.service';
 
 /**
  * Proxy Customer Omni API.
@@ -29,7 +29,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/customers')
 export class HaravanCustomerController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanCustomerService) {}
 
   @Get()
   @ApiOperation({

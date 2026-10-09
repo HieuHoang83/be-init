@@ -16,7 +16,7 @@ import {
   HaravanCollectionBody,
   ListHaravanCollectionsQuery,
 } from './dto/collection.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanCollectionService } from './haravan-collection.service';
 
 /**
  * Proxy Custom Collection Omni API (nhom san pham tuy chinh).
@@ -30,7 +30,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/custom_collections')
 export class HaravanCollectionController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanCollectionService) {}
 
   @Get()
   @ApiOperation({

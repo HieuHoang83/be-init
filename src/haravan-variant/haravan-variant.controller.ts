@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { GetHaravanVariantQuery, HaravanVariantBody } from './dto/variant.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanProductService } from '../haravan-product/haravan-product.service';
 
 /**
  * Proxy Product Variant Omni API (route không nằm dưới /products).
@@ -21,7 +21,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/variants')
 export class HaravanVariantController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanProductService) {}
 
   @Get(':variantId')
   @ApiOperation({

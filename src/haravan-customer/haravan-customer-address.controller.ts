@@ -15,7 +15,7 @@ import {
   HaravanCustomerAddressBody,
   ListHaravanCustomerAddressesQuery,
 } from './dto/customer.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanCustomerService } from './haravan-customer.service';
 
 /**
  * Proxy CustomerAddress Omni API (dia chi khach hang).
@@ -33,7 +33,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/customers/:customerId/addresses')
 export class HaravanCustomerAddressController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanCustomerService) {}
 
   @Get()
   @ApiOperation({

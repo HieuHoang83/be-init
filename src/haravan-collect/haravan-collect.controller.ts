@@ -15,7 +15,7 @@ import {
   HaravanCollectBody,
   ListHaravanCollectsQuery,
 } from './dto/collect.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanCollectService } from './haravan-collect.service';
 
 /**
  * Proxy Collect Omni API (quan he san pham - nhom san pham).
@@ -29,7 +29,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/collects')
 export class HaravanCollectController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanCollectService) {}
 
   @Get()
   @ApiOperation({ summary: 'Danh sach collect (GET /com/collects.json)' })

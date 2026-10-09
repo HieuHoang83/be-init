@@ -22,7 +22,7 @@ import {
   HaravanVariantBody,
   ListHaravanVariantsQuery,
 } from '../haravan-variant/dto/variant.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanProductService } from './haravan-product.service';
 
 /**
  * Proxy Product Omni API.
@@ -34,7 +34,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/products')
 export class HaravanProductController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanProductService) {}
 
   @Get()
   @ApiOperation({ summary: 'Danh sach san pham (GET /com/products.json)' })

@@ -1,7 +1,7 @@
 import { Controller, Get, Param, ParseIntPipe, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ListHaravanLocationsQuery } from './dto/location.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanLocationService } from './haravan-location.service';
 
 /**
  * Proxy Location Omni API.
@@ -13,7 +13,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId/locations')
 export class HaravanLocationController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanLocationService) {}
 
   @Get()
   @ApiOperation({ summary: 'Danh sach kho (GET /com/locations.json)' })

@@ -12,7 +12,7 @@ import {
   HaravanInventoryAdjustBody,
   ListHaravanInventoryLocationsQuery,
 } from '../haravan-location/dto/location.dto';
-import { HaravanOmniService } from '../api/haravan-omni.service';
+import { HaravanInventoryService } from './haravan-inventory.service';
 
 /**
  * Proxy Inventory Omni API (ton kho theo kho cua variant).
@@ -25,7 +25,7 @@ import { HaravanOmniService } from '../api/haravan-omni.service';
 @ApiBearerAuth('token')
 @Controller('haravan/:orgId')
 export class HaravanInventoryController {
-  constructor(private readonly haravan: HaravanOmniService) {}
+  constructor(private readonly haravan: HaravanInventoryService) {}
 
   @Get('inventory_locations')
   @ApiOperation({

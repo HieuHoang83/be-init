@@ -5,10 +5,10 @@ import { appConfig } from '../config';
 import { Shop, ShopSchema } from '../webhook-app/webhook-app.entity';
 import { AccessTokenStore } from './access-token.store';
 import { ApiClient } from './api.service';
-import { HaravanOmniService } from './haravan-omni.service';
 
 /**
- * Cung cấp client gọi Omni API (đơn hàng, sản phẩm, khách hàng).
+ * Cung cấp HTTP client gọi Omni API. Các service proxy theo tài nguyên nằm ở
+ * module tương ứng và đều kế thừa `HaravanGateway` ở đây.
  *
  * Đăng ký collection `shops` để AccessTokenStore đọc access token do callback
  * OAuth lưu lại.
@@ -18,7 +18,7 @@ import { HaravanOmniService } from './haravan-omni.service';
     ConfigModule.forFeature(appConfig),
     MongooseModule.forFeature([{ name: Shop.name, schema: ShopSchema }]),
   ],
-  providers: [ApiClient, AccessTokenStore, HaravanOmniService],
-  exports: [ApiClient, AccessTokenStore, HaravanOmniService],
+  providers: [ApiClient, AccessTokenStore],
+  exports: [ApiClient, AccessTokenStore],
 })
 export class ApiModule {}
