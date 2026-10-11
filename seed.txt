@@ -1,0 +1,19 @@
+Nap 200 khach hang cho org 200001220496
+Se dong bo ca Haravan va MongoDB.
+[Nest] 13272  - 10/09/2026, 3:53:03 PM    WARN [JobWorker] Job worker bi TAT (JOB_QUEUE_ENABLED=false)
+  ... da xu ly 25/200
+  ... da xu ly 50/200
+  ... da xu ly 75/200
+  ... da xu ly 100/200
+  ... da xu ly 125/200
+  ... da xu ly 150/200
+  ... da xu ly 175/200
+  ... da xu ly 200/200
+
+--- Ket qua ---
+Haravan: 197 khach moi, 3 khach cap nhat
+Loi: 0
+Elasticsearch: quet 207 khach, ghi thanh cong, index dang co 207
+
+Thu cong tim kiem 3 so cuoi:
+  GET /api/v1/customers/search?orgId=200001220496&q=000

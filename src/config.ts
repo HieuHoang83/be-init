@@ -25,6 +25,52 @@ export interface OAuthConfig {
   redirectUri: string;
 }
 
+/**
+ * Cau hinh OpenID Connect (Haravan Connect) de dang nhap bang tai khoan
+ * Haravan thay vi tai khoan noi bo (so dien thoai + mat khau).
+ *
+ * Luong: GET /haravan/auth/login -> accounts.haravan.com/connect/authorize
+ *        -> POST /haravan/auth/callback (form_post) -> tra JWT noi bo.
+ */
+export interface OpenIdConfig {
+  /** Bat/tat co che dang nhap qua Haravan. */
+  enabled: boolean;
+  /** Issuer cua Haravan Connect, dung de lay OpenID Configuration. */
+  issuer: string;
+  clientId: string;
+  clientSecret: string;
+  /** Phai trung tuyet doi voi redirect_uri da dang ky tren Partner Dashboard. */
+  redirectUri: string;
+  /**
+   * Noi chuyen huong trinh duyet sau khi doi code thanh cong.
+   * De trong thi callback tra JSON (dung cho mobile / test bang Postman).
+   */
+  frontendRedirectUri: string;
+  /** Scope yeu cau; `openid` la bat buoc, profile/email de lay thong tin nguoi dung. */
+  scope: string;
+  /**
+   * `code` (mac dinh) la Authorization Code Flow + PKCE.
+   * Doi neu Partner Dashboard yeu cau `code id_token` (hybrid flow).
+   */
+  responseType: string;
+  /** Tu tao user noi bo o lan dang nhap dau tien neu chua lien ket. */
+  autoProvision: boolean;
+  /** Vai tro gan cho user vua tao; phai ton tai trong collection `roles`. */
+  defaultRole: string;
+  /**
+   * Chi cho phep tai khoan Haravan thuoc shop nay dang nhap.
+   * 0/null = cho phep moi shop.
+   */
+  orgId: number | null;
+  /** Thoi gian song cua state/nonce va cua ma doi token mot lan (ms). */
+  stateTtlMs: number;
+  /**
+   * Host duoc phep nham trong `redirect_uri` gui len tu frontend.
+   * De trong thi bo qua kiem tra (chi nen dung o moi truong dev).
+   */
+  allowedRedirectHosts: string[];
+}
+
 export interface QueueConfig {
   concurrency: number;
   maxAttempts: number;
@@ -61,6 +107,7 @@ export interface WebhookConfig {
 
 export interface AppConfig {
   api: ApiConfig;
+  openid: OpenIdConfig;
   webhook: WebhookConfig;
   credentials: {
     accessToken: string;
@@ -99,6 +146,37 @@ export const appConfig = registerAs(
         clientSecret: process.env.HARAVAN_CLIENT_SECRET || '',
         redirectUri: process.env.HARAVAN_REDIRECT_URI || '',
       },
+    },
+    openid: {
+      enabled: process.env.HARAVAN_OPENID_ENABLED !== 'false',
+      issuer:
+        process.env.HARAVAN_OPENID_ISSUER || 'https://accounts.haravan.com',
+      clientId:
+        process.env.HARAVAN_OPENID_CLIENT_ID ||
+        process.env.HARAVAN_CLIENT_ID ||
+        '',
+      clientSecret:
+        process.env.HARAVAN_OPENID_CLIENT_SECRET ||
+        process.env.HARAVAN_CLIENT_SECRET ||
+        '',
+      redirectUri: process.env.HARAVAN_OPENID_REDIRECT_URI || '',
+      frontendRedirectUri:
+        process.env.HARAVAN_OPENID_FRONTEND_REDIRECT_URI || '',
+      // `org` de id_token co them `orgid` (shop cua nguoi dung dang nhap).
+      scope: process.env.HARAVAN_OPENID_SCOPE || 'openid profile email org',
+      responseType: process.env.HARAVAN_OPENID_RESPONSE_TYPE || 'code',
+      autoProvision: process.env.HARAVAN_OPENID_AUTO_PROVISION !== 'false',
+      defaultRole: process.env.HARAVAN_OPENID_DEFAULT_ROLE || 'Assistant Admin',
+      orgId: process.env.HARAVAN_OPENID_ORG_ID
+        ? Number(process.env.HARAVAN_OPENID_ORG_ID)
+        : null,
+      stateTtlMs: Number(process.env.HARAVAN_OPENID_STATE_TTL_MS || 600000),
+      allowedRedirectHosts: (
+        process.env.HARAVAN_OPENID_ALLOWED_REDIRECT_HOSTS || ''
+      )
+        .split(',')
+        .map((host) => host.trim())
+        .filter(Boolean),
     },
     webhook: {
       privateSecret: process.env.HARAVAN_WEBHOOK_SECRET || '',

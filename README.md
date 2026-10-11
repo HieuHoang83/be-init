@@ -60,6 +60,9 @@ Xem `.env.example` để có bản đầy đủ. Các nhóm chính:
 - **Luật auto-confirm** — `HARAVAN_MIN_PRIOR_ORDERS`, `HARAVAN_MIN_PRIOR_SPENT`.
 - **Hàng đợi** — `HARAVAN_QUEUE_CONCURRENCY`, `HARAVAN_QUEUE_MAX_ATTEMPTS`,
   `JOB_QUEUE_POLL_INTERVAL_MS`, `JOB_QUEUE_LEASE_MS`.
+- **Elasticsearch** — `ELASTICSEARCH_ENABLED`, `ELASTICSEARCH_NODE`,
+  `ELASTICSEARCH_INDEX_PREFIX`, và phần gom lệnh ghi: `ELASTICSEARCH_BATCH_SIZE` (10),
+  `ELASTICSEARCH_FLUSH_INTERVAL_MS` (3000), `ELASTICSEARCH_MAX_PENDING` (2000).
 - **JWT** — `JWT_ACCESS_TOKEN_SECRET`, `JWT_REFRESH_TOKEN_SECRET` và hạn sử dụng.
 
 Toàn bộ cấu hình được khai báo và kiểm tra kiểu trong một chỗ: [`src/config.ts`](src/config.ts).
@@ -113,6 +116,36 @@ Hai bảng log tách biệt có chủ đích:
 
 - `order_actions` — log **kỹ thuật**: mỗi lần gọi API, retry, lỗi (dùng để debug).
 - `order_events` — log **nghiệp vụ**: những gì con người quan tâm (dùng cho timeline UI).
+
+### Ghi Elasticsearch theo lô
+
+Mỗi lần khách hàng thay đổi trong MongoDB (webhook `customers/*`, đơn hàng mới, xoá khách),
+BE không ghi thẳng lên Elasticsearch mà **gom lại rồi ghi một lần**
+([`CustomerIndexBatcher`](src/customer/customer-index.batcher.ts)). Lô được ghi khi:
+
+1. đủ `ELASTICSEARCH_BATCH_SIZE` khách (mặc định **10**) trong lô hiện tại — ghi ngay; **hoặc**
+2. hết `ELASTICSEARCH_FLUSH_INTERVAL_MS` (mặc định **3000 ms**) tính từ khách đầu tiên của lô.
+
+Cái nào đến trước cũng ghi. Nhờ vậy 20 khách về trong một giây chỉ tốn **một** lần đọc MongoDB và
+**một** lệnh `bulk`, thay vì 20 job + 20 request. Khách bị sửa nhiều lần trong cùng lô thì chỉ ghi
+đúng một lần với bản mới nhất (đọc lại từ MongoDB lúc ghi), và thao tác sau thắng thao tác trước —
+sửa rồi xoá trong 3 giây thì chỉ còn một lệnh xoá.
+
+```
+Ghi khách (MongoDB xong)
+   ▼
+CustomerIndexBatcher.enqueue(id)        ← chỉ nhét id vào bộ đệm, trả về ngay
+   │
+   ├─ đủ 10 khách  ─┐
+   └─ hết 3 giây    ─┴─► flush: đọc MongoDB 1 lần ─► bulk 1 lần
+   │
+   └─ ghi lỗi / bộ đệm tràn (ES chậm) ─► đẩy job `customer.es_sync` vào hàng đợi để thử lại
+```
+
+Ghi lỗi hoặc vượt `ELASTICSEARCH_MAX_PENDING` thì phần chưa ghi được chuyển vào hàng đợi MongoDB
+để worker thử lại theo backoff, nên không mất dữ liệu khi Elasticsearch tạm thời không phản hồi.
+Nạp lại toàn bộ index sau khi bật Elasticsearch lần đầu hoặc sau khi index lệch:
+`POST /api/v1/customers/reindex` (xem [`CustomerIndexService`](src/customer/customer-index.service.ts)).
 
 ### Gọi Haravan API
 

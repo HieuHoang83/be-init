@@ -6,6 +6,8 @@ import { appConfig } from '../config';
 import { QueueModule } from '../queue/queue.module';
 import { WebhookPrivateModule } from '../webhook-private/webhook-private.module';
 import { ShopSettingsModule } from '../shop-settings/shop-settings.module';
+import { ElasticsearchModule } from '../elasticsearch/elasticsearch.module';
+import { CustomerModule } from '../customer/customer.module';
 import { OrderController } from './order.controller';
 import { OrderActionWorker } from './workers/order-action.worker';
 import { OrderWorker } from './workers/order.worker';
@@ -31,6 +33,9 @@ import { Customer, CustomerSchema } from './entities/customer.entity';
     ApiModule,
     WebhookPrivateModule,
     ShopSettingsModule,
+    ElasticsearchModule,
+    // Gom cong viec nap index khach theo lo thay vi ghi ngay tung khach.
+    CustomerModule,
     MongooseModule.forFeature([
       { name: Order.name, schema: OrderSchema },
       { name: OrderAction.name, schema: OrderActionSchema },

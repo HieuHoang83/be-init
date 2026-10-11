@@ -17,6 +17,7 @@ import { Customer } from '../entities/customer.entity';
 import { appConfig } from '../../config';
 import { ApiClient } from '../../api/api.service';
 import { ShopSettingsService } from '../../shop-settings/shop-settings.service';
+import { CustomerIndexBatcher } from '../../customer/customer-index.batcher';
 
 describe('OrderService - evaluateConfirmEligibility', () => {
   let service: OrderService;
@@ -119,6 +120,13 @@ describe('OrderService - evaluateConfirmEligibility', () => {
         OrderAuditService,
         OrderQueryService,
         { provide: ApiClient, useValue: apiMock },
+        {
+          provide: CustomerIndexBatcher,
+          useValue: {
+            enqueue: jest.fn(),
+            enqueueDelete: jest.fn(),
+          },
+        },
         {
           provide: ShopSettingsService,
           useValue: { isAutoCheckRepeatOrdersEnabled: jest.fn().mockResolvedValue(true) },

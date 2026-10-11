@@ -63,18 +63,92 @@ export class UserService {
     return this.roleModel.findOne({ name }).exec();
   }
 
+  /**
+   * Tim user da tung lien ket voi tai khoan Haravan (truong `sub` cua id_token).
+   * Day la duong lien ket chinh cua co che dang nhap qua Haravan Connect.
+   */
+  async findOneByHaravanUserId(
+    haravanUserId: string,
+  ): Promise<UserWithRole | null> {
+    return (await this.userModel
+      .findOne({ haravanUserId })
+      .populate('role')
+      .exec()) as UserWithRole | null;
+  }
+
+  /**
+   * Tim user theo email Haravan. Dung khi user da ton tai (dang nhap bang so
+   * dien thoai) va muon gan them tai khoan Haravan vao user do.
+   */
+  async findOneByHaravanEmail(email: string): Promise<UserWithRole | null> {
+    return (await this.userModel
+      .findOne({ haravanEmail: email })
+      .populate('role')
+      .exec()) as UserWithRole | null;
+  }
+
+  /** Gan tai khoan Haravan vao user da ton tai (lan dang nhap dau tien). */
+  linkHaravanAccount(
+    userId: string,
+    data: {
+      haravanUserId: string;
+      haravanEmail?: string;
+      haravanOrgId?: number;
+    },
+  ) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          $set: {
+            haravanUserId: data.haravanUserId,
+            ...(data.haravanEmail ? { haravanEmail: data.haravanEmail } : {}),
+            ...(data.haravanOrgId ? { haravanOrgId: data.haravanOrgId } : {}),
+            haravanLoginAt: new Date(),
+          },
+        },
+        { new: true },
+      )
+      .populate('role')
+      .exec();
+  }
+
+  /** Ghi nhan thoi diem dang nhap qua Haravan, khong doi phien ban aoi. */
+  touchHaravanLogin(userId: string, haravanOrgId?: number) {
+    return this.userModel
+      .findByIdAndUpdate(
+        userId,
+        {
+          $set: {
+            haravanLoginAt: new Date(),
+            ...(haravanOrgId ? { haravanOrgId } : {}),
+          },
+        },
+        { new: true },
+      )
+      .populate('role')
+      .exec();
+  }
+
   async create(data: {
     name: string;
     phone: string;
     password: string;
     avatar?: string;
     roleId: string;
+    /** Lien ket tai khoan Haravan (login qua Haravan Connect). */
+    haravanUserId?: string;
+    haravanEmail?: string;
+    haravanOrgId?: number;
   }): Promise<UserWithRole> {
     const { roleId, ...userData } = data;
     return (await this.userModel
       .create({
         ...userData,
         role: roleId,
+        ...(data.haravanOrgId
+          ? { haravanOrgId: data.haravanOrgId, haravanLoginAt: new Date() }
+          : {}),
         password: this.hashPassword(data.password),
       })
       .then((u) => u.populate('role'))) as UserWithRole;

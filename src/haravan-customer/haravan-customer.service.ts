@@ -3,6 +3,17 @@ import { ApiClient } from '../api/api.service';
 import { HaravanGateway } from '../api/haravan.gateway';
 
 /**
+ * Haravan viet API theo kieu Rails: thanh body phai nam trong truong `customer`.
+ *
+ * Gui body phang se nhan `400 customer must be an object`. Ham nay boc san cho moi thao tac
+ * tao/sua khach; neu caller da boc thi giup nguyen de khong boc hai lan.
+ */
+function wrapCustomer(body: object): object {
+  if (body && typeof body === 'object' && 'customer' in body) return body;
+  return { customer: body };
+}
+
+/**
  * Service proxy tài nguyên Haravan của module haravan-customer.
  * Mỗi module chỉ có các endpoint thuộc đúng tài nguyên của nó.
  */
@@ -48,11 +59,16 @@ export class HaravanCustomerService extends HaravanGateway {
   }
 
   createCustomer(orgId: number, body: object) {
-    return this.forward(orgId, 'POST', '/customers.json', body);
+    return this.forward(orgId, 'POST', '/customers.json', wrapCustomer(body));
   }
 
   updateCustomer(orgId: number, customerId: number, body: object) {
-    return this.forward(orgId, 'PUT', `/customers/${customerId}.json`, body);
+    return this.forward(
+      orgId,
+      'PUT',
+      `/customers/${customerId}.json`,
+      wrapCustomer(body),
+    );
   }
 
   deleteCustomer(orgId: number, customerId: number) {

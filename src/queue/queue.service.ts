@@ -49,6 +49,14 @@ export const JOB_NAMES = {
   ORDER_REFUND: 'order.refund',
   ORDER_TRANSACTION: 'order.transaction',
   ORDER_SYNC_CUSTOMER: 'order.sync_customer',
+  /** Nap mot khach tu MongoDB sang index Elasticsearch. */
+  CUSTOMER_ES_SYNC: 'customer.es_sync',
+  /** Tao khach tren Haravan; Haravan xong se ban webhook `customers/create` ve. */
+  CUSTOMER_CREATE: 'customer.create',
+  /** Sua khach tren Haravan; Haravan xong se ban webhook `customers/update` ve. */
+  CUSTOMER_UPDATE: 'customer.update',
+  /** Xu ly webhook `customers/*`: ghi MongoDB roi day Elasticsearch. */
+  CUSTOMER_WEBHOOK_SYNC: 'customer.webhook_sync',
 } as const;
 
 export type JobName = typeof JOB_NAMES[keyof typeof JOB_NAMES];

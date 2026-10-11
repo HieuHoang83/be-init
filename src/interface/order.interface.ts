@@ -178,6 +178,7 @@ export const TOPICS = {
   ORDER_PAID: 'orders/paid',
   CUSTOMER_CREATE: 'customers/create',
   CUSTOMER_UPDATE: 'customers/update',
+  CUSTOMER_DELETE: 'customers/delete',
   APP_UNINSTALLED: 'app/uninstalled',
   SHOP_UPDATE: 'shop/update',
 } as const;
@@ -197,6 +198,18 @@ export const ORDER_TOPIC_SET: ReadonlySet<string> = new Set<string>([
   TOPICS.ORDER_PAID,
   TOPICS.ORDER_CANCEL,
   TOPICS.ORDER_FULFILLED,
+]);
+
+/**
+ * Cac chu de webhook lien quan den khach hang.
+ *
+ * Webhook nay chinh la noi BE nhan xac nhan sau khi Haravan da xu ly xong yeu cau tao/sua
+ * khach, nen day la duong ghi chuan vao MongoDB + Elasticsearch.
+ */
+export const CUSTOMER_TOPIC_SET: ReadonlySet<string> = new Set<string>([
+  TOPICS.CUSTOMER_CREATE,
+  TOPICS.CUSTOMER_UPDATE,
+  TOPICS.CUSTOMER_DELETE,
 ]);
 
 export interface ChallengeQuery {

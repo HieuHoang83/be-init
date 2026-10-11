@@ -8,6 +8,7 @@
 | [`note.md`](note.md) | Ghi chú về hành vi thật của Haravan API (đã test qua Postman) |
 | [`inventory.md`](inventory.md) | Tài liệu Inventory Adjustment của Haravan (nguồn gốc) |
 | [`postman-orders.md`](postman-orders.md) | Hướng dẫn gọi API tìm và xem một đơn qua Postman |
+| [`haravan-auth.md`](haravan-auth.md) | Đăng nhập bằng tài khoản Haravan (Haravan Connect) |
 
 ## Tài liệu kiến trúc Job (tham chiếu)
 

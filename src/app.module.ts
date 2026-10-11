@@ -17,6 +17,8 @@ import { QueueModule } from './queue/queue.module';
 import { WebhookPrivateModule } from './webhook-private/webhook-private.module';
 import { WebhookAppModule } from './webhook-app/webhook-app.module';
 import { ShopSettingsModule } from './shop-settings/shop-settings.module';
+import { ElasticsearchModule } from './elasticsearch/elasticsearch.module';
+import { HaravanAuthModule } from './haravan-auth/haravan-auth.module';
 
 @Module({
   imports: [
@@ -33,7 +35,10 @@ import { ShopSettingsModule } from './shop-settings/shop-settings.module';
     ]),
     UsersModule,
     AuthModule,
+    // Dang nhap bang tai khoan Haravan (Haravan Connect).
+    HaravanAuthModule,
     MongoModule,
+    ElasticsearchModule,
     OrderModule,
     ShopSettingsModule,
     CustomerModule,

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist-scripts",
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "mongo/**/*.ts", "scripts/**/*.ts"],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "dist-scripts",
+    "**/*spec.ts",
+    "scripts/check-po-rows.ts"
+  ]
+}

@@ -31,6 +31,7 @@ import {
 } from '../entities/order.entity';
 import { ConfirmDecision, decideConfirm } from '../rules/order.rules';
 import { OrderAuditService } from './order-audit.service';
+import { CustomerIndexBatcher } from '../../customer/customer-index.batcher';
 import {
   buildCustomerPatch,
   changedOrderFields,
@@ -65,6 +66,7 @@ export class OrderService {
     private readonly customerModel: Model<CustomerDocument>,
     private readonly audit: OrderAuditService,
     private readonly apiClient: ApiClient,
+    private readonly indexBatcher: CustomerIndexBatcher,
     @Inject(appConfig.KEY) config: ConfigType<typeof appConfig>,
   ) {
     this.rule = config.rule;
@@ -482,11 +484,12 @@ export class OrderService {
           { $set: patch, $addToSet: { orderIds: payload.id } },
         )
         .exec();
+      this.scheduleCustomerIndex(String(existing._id));
       return;
     }
 
     try {
-      await this.customerModel.create({
+      const created = await this.customerModel.create({
         ...patch,
         firstSeenAt: new Date(),
         orderIds: [payload.id],
@@ -498,6 +501,7 @@ export class OrderService {
           isOrderCreatedEvent && c.orders_count != null ? c.orders_count : 0,
         haravanTotalSpent: c.total_spent ?? 0,
       });
+      this.scheduleCustomerIndex(String(created._id));
     } catch (error) {
       if ((error as { code?: number })?.code !== 11000) throw error;
 
@@ -513,6 +517,7 @@ export class OrderService {
             { $set: patch, $addToSet: { orderIds: payload.id } },
           )
           .exec();
+        this.scheduleCustomerIndex(String(racedCustomer._id));
       } else {
         this.logger.warn(
           `Bo qua dong bo khach don ${payload.id} do xung dot khoa duy nhat`,
@@ -526,6 +531,17 @@ export class OrderService {
         phone ?? email ?? 'khong co khoa'
       }` + ` (don ${payload.order_number ?? payload.id})`,
     );
+  }
+
+  /**
+   * Gom cong viec nap khach nay vao Elasticsearch.
+   *
+   * Mot don moi thi gia tri khach (so don, tong chi, don moi nhat) doi theo, va nhieu don cua
+   * cung mot luc se duoc gom lai: ca lo chi doc MongoDB va goi Elasticsearch mot lan thay vi
+   * moi khach mot lenh. Luu don khong bao gio bi chan boi Elasticsearch.
+   */
+  private scheduleCustomerIndex(customerId: string): void {
+    this.indexBatcher.enqueue(customerId);
   }
 
   /** Đếm đơn trước của khách, bỏ đơn hiện tại và đơn đã hủy. */

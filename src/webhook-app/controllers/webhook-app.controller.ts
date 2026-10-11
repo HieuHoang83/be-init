@@ -21,7 +21,10 @@ import {
   extractOrgId,
   readWebhookMeta,
 } from '../../core/webhook-payload.util';
-import { ORDER_TOPIC_SET } from '../../interface/order.interface';
+import {
+  CUSTOMER_TOPIC_SET,
+  ORDER_TOPIC_SET,
+} from '../../interface/order.interface';
 import { HmacRequest } from '../../core/webhook-hmac.guard';
 import { HMAC_HEADER } from '../../core/webhook-hmac.util';
 import { logWebhookPayload } from '../../core/webhook-payload-logger';
@@ -170,6 +173,63 @@ export class WebhookAppController {
 
     // Chỉ xử lý chủ đề đơn hàng. Các topic khác (customers/*, shop/*) có
     // trường `id` riêng nên tuyệt đối không được coi là đơn hàng.
+    // Webhook khach hang: Haravan da xu ly xong yeu cau tao/sua khach ma nguoi dung vua goi
+    // qua hang doi cong viec cua BE. Day la duong ghi chuan vao MongoDB roi day sang
+    // Elasticsearch, nen phai xu ly TRUOC khi bo qua cac topic khac.
+    if (CUSTOMER_TOPIC_SET.has(topic)) {
+      const data = (envelope['data'] ?? envelope) as Record<string, unknown>;
+      const customer = (data['customer'] ?? data) as Record<string, unknown>;
+      const haravanCustomerId = Number(customer['id']);
+
+      if (!orgId || !haravanCustomerId) {
+        this.logger.warn(
+          `Bo qua webhook ${topic}: thieu orgId hoac customer.id`,
+        );
+        logWebhookPayload({
+          kind: 'app',
+          flow: 'event_notification',
+          method: req.method,
+          path: req.originalUrl ?? null,
+          stage: 'processed',
+          topic,
+          orgId,
+          status: 200,
+          result: {
+            outcome: 'bo_qua_thieu_du_lieu',
+            note: 'Thieu orgId hoac customer.id',
+            headers: picked,
+          },
+        });
+        return { received: true, topic, orgId, queued: false };
+      }
+
+      const job = await this.jobQueue.enqueue(JOB_NAMES.CUSTOMER_WEBHOOK_SYNC, {
+        orgId,
+        topic,
+        customer,
+      });
+
+      logWebhookPayload({
+        kind: 'app',
+        flow: 'event_notification',
+        method: req.method,
+        path: req.originalUrl ?? null,
+        stage: 'processed',
+        topic,
+        orgId,
+        status: 200,
+        result: {
+          outcome: 'da_xep_hang_doi',
+          note: `Khach ${haravanCustomerId} -> job ${job.id}`,
+          headers: picked,
+        },
+      });
+      this.logger.log(
+        `Webhook ${topic}: khach ${haravanCustomerId} -> job ${job.id}`,
+      );
+      return { received: true, topic, orgId, queued: true, jobId: job.id };
+    }
+
     if (!ORDER_TOPIC_SET.has(topic)) {
       this.logger.log(`Bo qua topic "${topic}" kiem tra don hang`);
       logWebhookPayload({

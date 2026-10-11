@@ -1,5 +1,6 @@
 # compiled output
 /dist
+/dist-scripts
 /node_modules
 /prisma/migrations
 package-lock.json
