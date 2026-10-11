@@ -53,6 +53,14 @@ export interface OpenIdConfig {
    * Doi neu Partner Dashboard yeu cau `code id_token` (hybrid flow).
    */
   responseType: string;
+  /**
+   * Ep Haravan hien them mot buoc khi dang nhap.
+   *   - `consent` : moi lan dang nhap deu phai duyet lai quyen
+   *   - `login`   : moi lan dang nhap deu phai nhap lai tai khoan/mat khau
+   *   - `select_account` : chon lai tai khoan
+   * De rong thi giu hanh vi mac dinh (con session Haravan thi vao thang).
+   */
+  prompt: string;
   /** Tu tao user noi bo o lan dang nhap dau tien neu chua lien ket. */
   autoProvision: boolean;
   /** Vai tro gan cho user vua tao; phai ton tai trong collection `roles`. */
@@ -165,6 +173,7 @@ export const appConfig = registerAs(
       // `org` de id_token co them `orgid` (shop cua nguoi dung dang nhap).
       scope: process.env.HARAVAN_OPENID_SCOPE || 'openid profile email org',
       responseType: process.env.HARAVAN_OPENID_RESPONSE_TYPE || 'code',
+      prompt: process.env.HARAVAN_OPENID_PROMPT || '',
       autoProvision: process.env.HARAVAN_OPENID_AUTO_PROVISION !== 'false',
       defaultRole: process.env.HARAVAN_OPENID_DEFAULT_ROLE || 'Assistant Admin',
       orgId: process.env.HARAVAN_OPENID_ORG_ID

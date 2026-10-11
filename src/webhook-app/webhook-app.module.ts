@@ -6,6 +6,7 @@ import { ApiModule } from '../api/api.module';
 import { OrderModule } from '../order/order.module';
 import { QueueModule } from '../queue/queue.module';
 import { WebhookPrivateModule } from '../webhook-private/webhook-private.module';
+import { HaravanAuthModule } from '../haravan-auth/haravan-auth.module';
 import { WebhookAppController } from './controllers/webhook-app.controller';
 import { WebhookAppManageController } from './controllers/webhook-app-manage.controller';
 import { WebhookAppHmacGuard } from './guards/webhook-app.guard';
@@ -31,6 +32,8 @@ import {
     // WebhookPrivateService lưu payload để worker tải lại.
     // Webhook ứng dụng dùng guard HMAC riêng trong controller của module này.
     WebhookPrivateModule,
+    // Callback login cu Haravan cung co the quay ve `/webhooks/callback`.
+    HaravanAuthModule,
     MongooseModule.forFeature([
       { name: AppInstallation.name, schema: AppInstallationSchema },
       { name: Shop.name, schema: ShopSchema },

@@ -7,6 +7,9 @@ package-lock.json
 # Logs
 logs
 *.log
+# log cua lenh chay tay (seed, chay server) — sinh moi moi lan chay nen khong commit
+seed*.txt
+srv*.txt
 npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*

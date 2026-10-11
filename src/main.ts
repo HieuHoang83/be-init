@@ -19,6 +19,13 @@ async function bootstrap() {
   // Nạp cấu hình từ biến môi trường.
   const configService = app.get(ConfigService);
 
+  // Phai tin `X-Forwarded-Proto` / `X-Forwarded-Host` cua proxy (ngrok, nginx,
+  // cloud load balancer). Khong co dong nay thi `req.protocol` luon la `http`
+  // va `req.get('host')` la `localhost:3000`, nen khi dung `redirect_uri` bang
+  // `req.protocol + req.get('host')` se lech voi URL da dang ky tren Haravan
+  // -> Haravan tra `invalid_grant` khi doi code.
+  app.set('trust proxy', true);
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

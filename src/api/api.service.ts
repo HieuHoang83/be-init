@@ -332,6 +332,7 @@ export class ApiClient {
    */
   async exchangeAuthorizationCode(
     code: string,
+    redirectUri?: string,
   ): Promise<ApiResponse<OAuthTokenResponse>> {
     const url = 'https://accounts.haravan.com/connect/token';
     const startedAt = Date.now();
@@ -342,7 +343,9 @@ export class ApiClient {
       client_secret: this.cfg.oauth.clientSecret,
       code,
       // redirect_uri phải giống hệt URI ở bước cấp quyền, nếu không sẽ lỗi invalid_grant.
-      redirect_uri: this.cfg.oauth.redirectUri,
+      // Mặc định lấy từ .env, nhưng nếu request về tới endpoint khác thì lấy theo
+      // chính URL vừa được Haravan chuyển hướng tới (bắt buộc phải trùng tuyệt đối).
+      redirect_uri: redirectUri || this.cfg.oauth.redirectUri,
     });
 
     const abort = new AbortController();

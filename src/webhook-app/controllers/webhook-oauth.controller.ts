@@ -5,15 +5,18 @@ import {
   Inject,
   Logger,
   Query,
+  Req,
   Res,
 } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { appConfig } from '../../config';
 import { ApiClient, ApiError } from '../../api/api.service';
 import { logWebhookPayload } from '../../core/webhook-payload-logger';
 import { AccessTokenStore } from '../../api/access-token.store';
 import { WebhookAppService } from '../services/webhook-app.service';
+import { Public } from '../../decorators/customize';
+import { HaravanLoginFlowService } from '../../haravan-auth/haravan-login-flow.service';
 
 /**
  * Callback OAuth của ứng dụng Haravan, từ bước 2 sang bước 3.
@@ -26,6 +29,7 @@ import { WebhookAppService } from '../services/webhook-app.service';
  * và mã ủy quyền không thể đổi lấy token.
  */
 @Controller('webhooks/callback')
+@Public()
 export class WebhookOauthController {
   private readonly logger = new Logger(WebhookOauthController.name);
 
@@ -36,19 +40,44 @@ export class WebhookOauthController {
     private readonly api: ApiClient,
     private readonly tokenStore: AccessTokenStore,
     private readonly appService: WebhookAppService,
+    private readonly haravanFlow: HaravanLoginFlowService,
   ) {
     this.cfg = config.api.oauth;
   }
 
   @Get()
   async handleCallback(
+    @Query('state') state: string | undefined,
     @Query('code') code: string | undefined,
     @Query('scope') scope: string | undefined,
     @Query('error') error: string | undefined,
     @Query('error_description') errorDescription: string | undefined,
     @Query('session_state') sessionState: string | undefined,
     @Res() res: Response,
+    @Req() req: Request,
   ): Promise<void> {
+    //
+    // Haravan chi cho phep MOT `redirect_uri` cho mot app, va ca luong cai app
+    // lan luong dang nhap deu di qua `/connect/authorize`. Neu co `state` thi day
+    // la callback dang nhap (state do `GET /haravan/auth/login` sinh ra), chuyen
+    // sang xu ly login; con lai thi xu ly cai app nhu cu.
+    if (state) {
+      this.logger.log('Co `state` -> chuyen sang luong dang nhap Haravan');
+      await this.haravanFlow.dispatchCallback(
+        {
+          code,
+          state,
+          scope,
+          session_state: sessionState,
+          error,
+          error_description: errorDescription,
+        },
+        req,
+        res,
+      );
+      return;
+    }
+
     logWebhookPayload({
       kind: 'app',
       flow: 'oauth_callback',

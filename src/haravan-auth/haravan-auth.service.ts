@@ -80,7 +80,7 @@ export class HaravanAuthService {
 
     this.state.saveState(state, { nonce, codeVerifier, redirectUri });
 
-    return oauth.buildAuthorizationUrl(client, {
+    const params: Record<string, string> = {
       redirect_uri: this.cfg.redirectUri,
       scope: this.cfg.scope,
       response_type: this.cfg.responseType,
@@ -88,7 +88,13 @@ export class HaravanAuthService {
       nonce,
       code_challenge: await oauth.calculatePKCECodeChallenge(codeVerifier),
       code_challenge_method: 'S256',
-    });
+    };
+
+    // `prompt=consent` bat nguoi dung phai duyet lai quyen moi lan dang nhap
+    // thay vi con session Haravan la vao thang.
+    if (this.cfg.prompt) params.prompt = this.cfg.prompt;
+
+    return oauth.buildAuthorizationUrl(client, params);
   }
 
   /**
@@ -100,6 +106,11 @@ export class HaravanAuthService {
     state?: string;
     error?: string;
     error_description?: string;
+    /**
+     * URL Haravan vua chuyen huong toi. Token request bat buoc phai trung
+     * `redirect_uri` cua buoc cap quyen, nen lay dung dia chi nhan request.
+     */
+    redirectUri?: string;
   }): Promise<HaravanLoginResult> {
     this.assertEnabled();
 
@@ -120,7 +131,7 @@ export class HaravanAuthService {
     const saved = this.state.consumeState(params.state);
     const client = await this.getClient();
 
-    const currentUrl = new URL(this.cfg.redirectUri);
+    const currentUrl = new URL(params.redirectUri || this.cfg.redirectUri);
     currentUrl.searchParams.set('code', params.code);
     if (params.state) currentUrl.searchParams.set('state', params.state);
 
@@ -190,9 +201,21 @@ export class HaravanAuthService {
       }
 
       const message = (error as Error).message;
-      this.logger.error(`Doi code that bai: ${message}`);
+      // `openid-client` nem loi chung chung, chi tiet nam o `error` /
+      // `error_description` nen phai lay ra roi log lai.
+      const detail = error as Error & {
+        error?: string;
+        error_description?: string;
+        code?: string;
+      };
+      this.logger.error(
+        `Doi code that bai: ${message}` +
+          (detail.error ? ` (error=${detail.error})` : '') +
+          (detail.error_description ? ` - ${detail.error_description}` : ''),
+      );
       throw new UnauthorizedException(
-        `Doi code cua Haravan that bai: ${message}`,
+        `Doi code cua Haravan that bai: ${message}` +
+          (detail.error_description ? ` - ${detail.error_description}` : ''),
       );
     }
   }

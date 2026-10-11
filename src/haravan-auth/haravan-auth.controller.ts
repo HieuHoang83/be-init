@@ -5,12 +5,13 @@
   Get,
   Post,
   Query,
+  Req,
   Res,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Inject } from '@nestjs/common';
 import { ConfigType } from '@nestjs/config';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { Public, ResponseMessage, User } from '../decorators/customize';
 import { IUser } from '../interface/users.interface';
 import { AuthService } from '../auth/auth.service';
@@ -19,6 +20,7 @@ import { appConfig } from '../config';
 import { HaravanAuthService } from './haravan-auth.service';
 import { HaravanAuthStateService } from './haravan-auth-state.service';
 import { HaravanIdentityService } from './haravan-identity.service';
+import { HaravanLoginFlowService } from './haravan-login-flow.service';
 import {
   HaravanCallbackDto,
   HaravanLoginQueryDto,
@@ -50,6 +52,7 @@ export class HaravanAuthController {
     private readonly identity: HaravanIdentityService,
     private readonly authService: AuthService,
     private readonly userService: UserService,
+    private readonly flow: HaravanLoginFlowService,
   ) {
     this.cfg = config.openid;
   }
@@ -80,25 +83,26 @@ export class HaravanAuthController {
   })
   async callback(
     @Body() dto: HaravanCallbackDto,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    const { identity, redirectUri } = await this.haravanAuth.resolveIdentity(
-      dto,
-    );
-    const user = await this.identity.resolveUser(identity);
-    const session = await this.issueSession(user, identity);
+    await this.flow.dispatchCallback(dto, req, res);
+  }
 
-    // Khong co frontend: tra JSON de app/mobile tu lay token.
-    const frontendRedirectUri = redirectUri ?? this.cfg.frontendRedirectUri;
-    if (!frontendRedirectUri) {
-      res.status(200).json(session);
-      return;
-    }
-
-    // Co frontend: chuyen huong ve mot ma dung mot lan thay vi de access token
-    // trong query string (anh xinh qua proxy/log).
-    const ticket = this.state.issueTicket(user._id.toString());
-    res.redirect(this.withTicket(frontendRedirectUri, ticket));
+  /**
+   * Haravan cung cap theo ca hai kieu chuyen huong: `form_post` (POST) va
+   * query string (GET). Thieu GET thi nguoi dung dang nhap tren trinh duyet
+   * duoc chuyen huong ve day nhan duoc `Cannot GET ...` roi cham tai day.
+   */
+  @Public()
+  @Get('callback')
+  @ApiOperation({ summary: 'Haravan gui code tro ve qua query string (GET)' })
+  async callbackGet(
+    @Query() query: HaravanCallbackDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    await this.flow.dispatchCallback(query, req, res);
   }
 
   @Public()
@@ -108,7 +112,7 @@ export class HaravanAuthController {
     const ticket = this.state.consumeTicket(dto.ticket);
     const user = await this.userService.findOneById(ticket.userId);
 
-    return this.issueSession(user);
+    return this.flow.issueSession(user);
   }
 
   @ApiBearerAuth('token')
@@ -158,41 +162,6 @@ export class HaravanAuthController {
     };
   }
 
-  /** Sinh access/refresh token noi bo cho user vua dang nhap. */
-  private async issueSession(
-    user: UserWithRole,
-    identity?: HaravanIdentity,
-  ): Promise<HaravanLoginSession> {
-    const payload = {
-      id: user._id.toString(),
-      name: user.name,
-      phone: user.phone,
-      role: user.role?.name,
-    };
-
-    const refresh_token = this.authService.createRefreshToken(payload);
-    const access_token = this.authService.createAccessToken(payload);
-
-    await this.userService.updateRefreshToken(payload.id, refresh_token);
-
-    return {
-      user: {
-        id: payload.id,
-        name: user.name,
-        phone: user.phone,
-        avatar: user.avatar,
-        role: payload.role,
-      },
-      token: { access_token, refresh_token },
-      haravan: {
-        sub: identity?.sub ?? user.haravanUserId ?? '',
-        email: identity?.email ?? user.haravanEmail,
-        orgId: identity?.orgId ?? user.haravanOrgId,
-        role: identity?.role,
-      },
-    };
-  }
-
   /**
    * `redirect_uri` tu frontend chi duoc dung khi host nam trong danh sach
    * cho phep, tranh bien thanh `redirect_uri` cua Haravan thanh cong cong khai.
@@ -222,9 +191,4 @@ export class HaravanAuthController {
     return value;
   }
 
-  private withTicket(base: string, ticket: string): string {
-    const url = new URL(base);
-    url.searchParams.set('code', ticket);
-    return url.toString();
-  }
 }
